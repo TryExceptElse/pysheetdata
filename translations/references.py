@@ -1,0 +1,4 @@
+replacements = {
+    '&apos;': '\'',
+    '&gt;': '>',
+}
