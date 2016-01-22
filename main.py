@@ -142,10 +142,10 @@ class Cell:
                         if script_s[x: x + 5] == 'cells[':
                             start = x
                         elif script_s[x] == ']' and \
-                                        start is not None:
+                                start is not None:
                             reference = script_s[start + 6:x - 1]
                             start = None
-                            dependencies['cells[' +reference + ']'] = \
+                            dependencies['cells[' + reference + ']'] = \
                                 self.cell_from_reference(reference)
                     # except:  # todo: find out what error happens
                         # here and specify that.
@@ -186,12 +186,9 @@ class Cell:
         sheet_default = self.sheet.name
         book_default = self.sheet.book.file_name
         length = len(parts)
-        if length == 1:
-            return [book_default, sheet_default] + parts
-        elif length == 2:
-            return [book_default] + parts
-        elif length == 3:
-            return parts
+        if 0 < length <= 3:
+            additions = [book_default, sheet_default]
+            return additions[0: 3 - length] + parts
         else:
             raise SheetDataError('reference parts outside 1-3 range')
 
@@ -466,4 +463,3 @@ def find_unquoted(target, string, back=False, list_mode=False):
             if not 0 <= index < len(string) - target_length:
                 return
         return index
-
