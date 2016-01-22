@@ -1,4 +1,5 @@
 replacements = {
     '&apos;': '\'',
+    '&lt;': '<',
     '&gt;': '>',
 }
