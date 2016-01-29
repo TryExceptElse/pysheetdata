@@ -36,7 +36,7 @@ scripting variables:
 """
 
 import zipfile
-import xml.etree.ElementTree
+import xml.etree.ElementTree as ET
 
 from copy import deepcopy
 
@@ -336,7 +336,7 @@ class File:
         # of objects (cell)
 
         with zipfile.ZipFile(self.file).open('content.xml') as content:
-            data = xml.etree.ElementTree.fromstring(content)
+            data = ET.parse(content).getroot()
             book_dict = {}
             book = Book(self, self.file)
             self.library.books[self.file] = book
