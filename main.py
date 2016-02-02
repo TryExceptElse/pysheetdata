@@ -36,7 +36,7 @@ scripting variables:
 """
 
 import zipfile
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ElTree
 
 from copy import deepcopy
 
@@ -271,18 +271,88 @@ class CellRange:
 
 
 class Book:
-    def __init__(self, library, file_name):
-        self.file_name = file_name
+    # gets passed relevant dictionary of elements by file.load()
+    # should not load cells until that function is called
+    # then pass on relevant sub-dictionary to sheets that are created
+    # so on
+    def __init__(self, library, file_name, element_tree):
+        self._file_name = file_name
+        self._element_tree = element_tree
         self.library = library
         self.sheets = {}
         self.sheet_list = []  # list of sheets, in order of file
 
+    def return_cell(self, *strings):
+        if strings[0] in self.sheets:
+            pass
+        elif strings[0] in self.sheet_list:
+            if self.library.recursive:
+                self.library.files[self._file_name].load_cells(strings[0])
+            else:
+                raise SheetDataError('cell referenced a cell not in loaded'
+                                     'sheet \'%s\'' % strings[0])
+        else:
+            raise SheetDataError('could not find referenced sheet')
+        return self.sheets[strings[0]].return_cell(strings[1:])
+
+    def load(self, sheet):
+        # loads either specified sheet, or if sheet is None, all sheets
+        [self.add_sheet(Sheet(self, element))
+         for element in self._element_tree if
+         element.tag.endswith('table') and
+         sheet not in self.sheets and
+         (sheet.name == sheet or sheet is None)]
+
+    def add_sheet(self, sheet):
+        self.sheets[sheet.name] = sheet
+
 
 class Sheet:
-    def __init__(self, book, name, matrix):
-        self.name = name
+    def __init__(self, book, element_tree):
+        self._rows = []
+        self._columns = []
+        self._tree = element_tree  # matrix of cells
+        self._attributes = self._tree.attrib()
         self.book = book
-        self.matrix = matrix  # matrix of cells
+        self.name = [self._attributes[attribute]
+                     for attribute in self._attributes
+                     if not attribute.endswith('style-name') and
+                     attribute.endswith('name')][0]
+
+    def load(self):
+        row_elements = [element for element in self._tree if
+                    element.tag.endswith('row')]
+        self._rows = [self._rows.append(Row(self, row_elements[y], y)) for
+                      y in range(0, len(row_elements) - 1)]
+
+    def return_cell(self, *strings):
+        if len(strings) == 1:
+            x, y = xy_from_a1(strings[0])
+        else:
+            x = strings[0]
+            y = strings[1]
+        return self._rows[y].return_cell(x)
+
+
+class Row:
+    def __init__(self, sheet, y, tree):
+        self.y = y
+        self.sheet = sheet
+        self._tree = tree
+        self._cells = []
+
+    def return_cell(self, x):
+        if not self._cells:
+            self.load()
+        return self._cells[x]
+
+    def load(self):
+        [self._cells.append(create_cell(element)) for
+         element in self._tree if element.tag.endswith('cell')]
+
+
+class Column:
+    pass  # not used yet
 
 
 class Library:
@@ -292,7 +362,7 @@ class Library:
         self.books = {}
         self.recursive = recursive_loading
 
-        [file.load_cells() for file in self.files]
+        [file.load() for file in self.files]
 
     def load_books(self):
         for book_name in self.list:
@@ -300,21 +370,28 @@ class Library:
 
     def load_book(self, book_name):
         self.files[book_name] = File(book_name)
-        self.files[book_name].load_cells()
+        self.files[book_name].load()
 
     def return_cell(self, *strings):
         # takes either xy or a1 cell ref
         # book, sheet, (row, cell) or (cell a1 ref)
-        if strings[0] not in self.books:
+        if strings[0] in self.books:
+            book = self.books[strings[0]]
+        elif '/' not in strings[0] and \
+             any([book_name.endswith(strings[0]) for book_name in self.books]):
+            book = [self.books[book_name] for book_name in self.books if
+                    book_name.endswith(strings[0])][0]
+        else:
             try:
                 if self.recursive:
                     self.load_book(strings[0])
+                    book = self.books[strings[0]]
                 else:
                     raise SheetDataError('cell referenced cell not in loaded'
                                          'book')
             except:
                 raise SheetDataError('could not find referenced book')
-        return self.books[strings[0]].return_cell(strings[1:])
+        return book.return_cell(strings[1:])
 
 
 class File:
@@ -326,7 +403,7 @@ class File:
         if self.file[:7] == 'file://':
             self.file = self.file[7:]
 
-    def load_cells(self, only_sheet=None):
+    def load(self, sheet_name=None):
         # load cell instances into
         #
         # dictionary (library)
@@ -335,38 +412,35 @@ class File:
         # of lists (row)
         # of objects (cell)
 
+        # tree structure:
+        # content
+        #   body
+        #       spreadsheet
+        #           table
+        #               table-row
+        #                   table-cell
+
+        # create element tree by extracting xml file and parsing it
         with zipfile.ZipFile(self.file).open('content.xml') as content:
-            data = ET.parse(content).getroot()
-            book_dict = {}
-            book = Book(self, self.file)
-            self.library.books[self.file] = book
-            # find each child which is a sheet ('table:table')
-            # if looking for a specific sheet, make sure it's that one
-            for sheet in [child for child in data if
-                          child.tag == 'table:table' and
-                          (child.find('name') == only_sheet or
-                           only_sheet is None)]:
-                sheet_name = sheet.find('name')
-                book.sheet_list.append(sheet_name)
-                rows = []
-                book_dict[sheet_name] = rows
-                sheet_instance = Sheet(book, sheet_name, rows)
-                book.sheets[sheet_name] = sheet_instance
-                y = 0
-                for row in [child for child in sheet if
-                            child.tag == 'table:table-row']:
-                    cells = []
-                    rows.append(cells)
-                    x = 0
-                    for cell in [child for child in row if
-                                 child.tag == 'table:table-cell']:
-                        cell_data = {}
-                        for key, value in cell.items():
-                            cell_data[key] = value
-                        cell_data['text'] = cell.find('text')
-                        # this may raise an error, if so, try-except it
-                        position = x, y
-                        cells.append(Cell(cell_data, position, sheet_instance))
+            data = ElTree.parse(content).getroot()
+
+            # set library.books [file_address]
+            # to book of appropriate data
+            if self.file not in self.library.books:
+                self.library.books[self.file] = \
+                    Book(self.library, self.file,
+                         [[level_2_entry for level_2_entry in level_1_entry
+                           if level_2_entry.tag.endswith('spreadsheet')]
+                          for level_1_entry in data
+                          if level_1_entry.tag.endswith('body')]
+                         ######
+                         [0][0])
+                #          __
+            self.library.books[self.file].load(sheet_name)
+
+
+def create_cell(element):
+
 
 
 def a1_from_xy(pos):
@@ -378,6 +452,26 @@ def a1_from_xy(pos):
     y_ref = str(pos[1] + 1)
 
     return x_ref + y_ref
+
+
+def xy_from_a1(s):
+    # returns x, y from inputted 'a1' string
+    x = None
+    y = None
+    for a in len(s):
+        if s[a - 1] in storage.ENGLISH_ALPHABET and \
+                s[a] in storage.ARABIC_NUMBERS:
+            x = s[:a]
+            y = s[a:]
+            break
+
+    if x is None:
+        raise SheetDataError('could not parse reference to %s' % s)
+
+    x = letter_to_x(x)
+    y -= 1
+
+    return x, y
 
 
 def x_to_letter(x):
@@ -404,6 +498,14 @@ def x_to_letter(x):
         s += storage.ENGLISH_ALPHABET[i - 1]
 
     return s
+
+
+def letter_to_x(s):
+    s = s.lower().reversed()
+    val = 0
+    for x in range(0, len(s) - 1):
+        val += (ord(s[x]) - 96) * 26 ** x
+    return val
 
 
 def break_apart_reference(s):

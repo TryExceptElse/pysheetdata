@@ -6,4 +6,4 @@ test_library = main.Library(['file:///home/user3/PycharmProjects/pysheetdata/'
 for sheet in test_library.books:
     print(sheet)
 
-# print(test_library.return_cell(['test1.ods', 'sheet1', 'd2']))
+print(test_library.return_cell('test1.ods', 'sheet1', 'd2'))
