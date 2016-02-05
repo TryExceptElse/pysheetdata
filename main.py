@@ -7,7 +7,8 @@ it is intended to be used only with trusted data.
 
 note on file names:
     file names including ' : [ or ] are likely to mess things up, as
-    they tend to do to other spreadsheet programs as well
+    they tend to do to other spreadsheet programs as well (due to
+    the way file names and references are annotated in the xml file)
 
 given a ods file -
     extract
@@ -58,11 +59,14 @@ class Cell:
         # for each cell. speed vs memory usage
         self._cell_element = cell_data
         self._position = position
+        self._cached_position = position
         self.sheet = sheet
-        # these two below may be removed if deemed unneeded
-        self._cached_value = self.get_item('office:value')
-        # todo: _cached_text
+        # stores new values, without applying them to _cell_element
+        self._new_attrib = {}
+        self._new_text = None
 
+        # obsolete code, kept for purpose of making sure all old
+        # attributes have been handled - to be deleted once working
         '''
         with cell_data as self.cell_data:
             # cell data is ditched after init
@@ -130,21 +134,37 @@ class Cell:
     def data_type(self):
         return self.get('office:value-type')
 
+    @data_type.setter
+    def data_type(self, value):
+        self.set('office:value-type', value)
+
     @property
     def value(self):
         return self.get('office:value')
 
+    @value.setter
+    def value(self, value):
+        self.set('office:value', value)
+
     @property
     def cached_value(self):
-        return self._cached_value
+        # always returns original value
+        return self.get('office:value', True)
 
     @property
     def text(self):
-        pass  # todo
+        # text getter/setter is different from other attributes because
+        # it is stored separately in the xml file
+        return self._cell_element.text
+
+    @text.setter
+    def text(self, string):
+        if string != self.text:
+            self._new_text = string
 
     @property
     def cached_text(self):
-        pass  # todo
+        return self._cell_element.text
 
     @property
     def formula(self):
@@ -158,34 +178,67 @@ class Cell:
 
     @property
     def is_script(self):
-        if self.text[:len(PYSCRIPT_FLAG)] == PYSCRIPT_FLAG:
+        if self.text.startswith(PYSCRIPT_FLAG):
             return True
         else:
             return False
 
     @property
     def script(self):
-        if self.text[:len(PYSCRIPT_FLAG)] == PYSCRIPT_FLAG:
+        if self.is_script:
             return self.text[len(PYSCRIPT_FLAG):]
-        else:
-            return
+
+    @script.setter
+    def script(self, script_string):
+        self.text = PYSCRIPT_FLAG + script_string
 
     @property
     def a1(self):
         return a1_from_xy(self.position)
 
+    @a1.setter
+    def a1(self, a1_string):
+        self.position = xy_from_a1(a1_string)
+
     @property
     def position(self):
         return self._position
 
+    @position.setter
+    def position(self, tuple_or_list):
+        self.position = (tuple_or_list[0], tuple_or_list[1])
+
+    @property
+    def cached_position(self):
+        return self._cached_position
+
     @property
     # returns the dependencies of self.
     # may just have them be stored as standard
+    # I -don't think- this needs to be sent over to _new_attrib, but
+    # if that proves to be the case, this will need to be updated.
     def dependencies(self):
         return self.find_dependencies()
 
-    def get(self, string):
-        return self._cell_element.get(self.ns(string))
+    def get(self, string, cached=False):
+        # get method called by property getters that use the attrib
+        # dictionary
+        # check if attribute has a new value in self._new_attrib
+        # before getting it from the element tree attrib dictionary
+        string = self.ns(string)
+        if string in self._new_attrib and not cached:
+            return self._new_attrib[string]
+        else:
+            return self._cell_element.get(string)
+
+    def set(self, key, entry):
+        # set method called by properties using the attrib dict
+        # if new val is different from original, put in new_attrib
+        # dict, rather than editing loaded element tree. This allows
+        # changes to be reverted
+        key = self.ns(key)
+        if entry != self.get(key):
+            self._new_attrib[key] = entry
 
     def return_value(self):
         if self.has_contents:
@@ -231,6 +284,8 @@ class Cell:
             if self.return_script() is not None:
                 start = None
                 script_s = self.return_script()
+                # fixing text prop will fix the above error warning
+                # (if no warning, I forgot to remove this after fixing)
                 for x in range(0, len(script_s)):
                     # try:
                         if script_s[x: x + 5] == 'cells[':
@@ -326,6 +381,9 @@ class Cell:
 
 
 class CellRange:
+    # range of cells intended for evaluator - acts similar to cell
+    # in that it returns (total) value, dictionary of all dependencies,
+    # etc
     def __init__(self, start_cell, end_cell):
         sheet_list = start_cell.sheet.book.sheet_list
 
@@ -595,7 +653,7 @@ def xy_from_a1(s):
         raise SheetDataError('could not parse reference to %s' % s)
 
     x = letter_to_x(x)
-    y -= 1
+    y = int(y) - 1
 
     return x, y
 
@@ -627,9 +685,11 @@ def x_to_letter(x):
 
 
 def letter_to_x(s):
-    s = s.lower().reversed()
-    val = 0
-    for x in range(0, len(s) - 1):
+    # converts letter or letter series to arabic number value
+    # example: a --> 0, ab --> 28
+    s = s.lower()[::-1]
+    val = -1  # starts at -1 so that a, when evaluated as 1, returns 0
+    for x in range(0, len(s)):
         val += (ord(s[x]) - 96) * 26 ** x
     return val
 
@@ -663,6 +723,11 @@ def break_apart_reference(s):
 def find_unquoted(target, string, back=False, list_mode=False):
     # finds unquoted target in string and returns the position of the
     # first character
+    # this function is used for finding a string in a parent string
+    # but only if it is not enclosed in quotes - useful for finding a
+    # cell reference in a formula, where you want to find 'cell['
+    # but not when used as in a script saying
+    # print('you can access cells by typing cell[<reference>]')
     motion = 1
     index = 0
     target_length = len(target)
@@ -692,4 +757,4 @@ def find_unquoted(target, string, back=False, list_mode=False):
                 return
         return index
 
-PYSCRIPT_FLAG = 'py='
+PYSCRIPT_FLAG = 'py='  # flag denoting start of python script
