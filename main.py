@@ -65,44 +65,9 @@ class Cell:
         self._new_attrib = {}
         self._new_text = None
 
-        # obsolete code, kept for purpose of making sure all old
-        # attributes have been handled - to be deleted once working
-        '''
-        with cell_data as self.cell_data:
-            # cell data is ditched after init
-            if self.mode == 'standard' or self.mode == 'formatted':
-                self.position = position  # (x, y)
-                self.sheet = sheet
-                if self.cell_data:
-                    self.has_contents = True
-                else:
-                    self.has_contents = False
-                if self.has_contents:
-                    self.data_type = self.cell_data['office:value-type']
-                    self.text = self.cell_data['text']
-                    if 'office:value' in self.cell_data:
-                        self.cached_value = self.cell_data['office:value']
-                        self.value = deepcopy(self.cached_value)
-                    else:
-                        self.cached_value = None
-                        self.value = None
-                    if 'table:formula' in self.cell_data:
-                        self.raw_formula = self.cell_data['table:formula']
-                    else:
-                        self.raw_formula = None
-                    if self.text[:3] == 'py=':
-                        self.is_script = True
-                    else:
-                        self.is_script = False
-                # dictionary of dependencies with the cell's reference
-                # in self.raw_formula as key
-                self.dependencies = self.find_dependencies()
-                self.a1 = a1_from_xy(self.position)
-            # todo: test if cell data is still present after init,
-            # if so use alternate means to save space
-            if self.mode == 'formatted':
-                pass  # formatting stuff to load if needed.
-            '''
+        # may be added in the future to speed up program
+        # self._dependencies
+        # self._dependants
 
     @property
     def library(self):
@@ -140,6 +105,11 @@ class Cell:
 
     @property
     def value(self):
+        # at the moment, reevaluates all cells in dependency tree
+        # in the future, once dependants and change flags are
+        # instituted, will only reevaluate if a cell in the tree has
+        # changed
+        self.evaluate()
         return self.get('office:value')
 
     @value.setter
@@ -148,7 +118,7 @@ class Cell:
 
     @property
     def cached_value(self):
-        # always returns original value
+        # always returns original value from the xml file
         return self.get('office:value', True)
 
     @property
@@ -159,6 +129,7 @@ class Cell:
 
     @text.setter
     def text(self, string):
+        # not using self.set because text is stored separately
         if string != self.text:
             self._new_text = string
 
@@ -167,12 +138,14 @@ class Cell:
         return self._cell_element.text
 
     @property
+    # this is the formula as modified to appear as it does as typed
+    # by a user in the spreadsheet program
     def formula(self):
         return self.get('table:formula')
 
     @property
-    # keeping this identical to formula for the moment for historical
-    # reasons, might end up redoing this
+    # this is the formula as stored in the xml file, with formatting
+    # left in
     def raw_formula(self):
         return self.get('table:formula')
 
@@ -241,12 +214,9 @@ class Cell:
             self._new_attrib[key] = entry
 
     def return_value(self):
-        if self.has_contents:
-            if self.value is None:
-                self.evaluate()
-            return self.value
-        else:
-            return None
+        # candidate for deletion once code has been reconstituted to not
+        # need these non-property getters/setters
+        return self.value
 
     def return_script(self):
         # considering simply adding 'self.script' to cell
@@ -360,8 +330,6 @@ class Cell:
                         self.text = str(evaluation)
                     except TypeError:
                         pass
-        else:
-            return None
 
     def run_script(self, dependencies):
         # dependencies is list of cells that are used
