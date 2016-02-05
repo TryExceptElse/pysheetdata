@@ -7,7 +7,8 @@ it is intended to be used only with trusted data.
 
 note on file names:
     file names including ' : [ or ] are likely to mess things up, as
-    they tend to do to other spreadsheet programs as well
+    they tend to do to other spreadsheet programs as well (due to
+    the way file names and references are annotated in the xml file)
 
 given a ods file -
     extract
