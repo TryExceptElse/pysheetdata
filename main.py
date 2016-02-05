@@ -36,9 +36,7 @@ scripting variables:
 """
 
 import zipfile
-import xml.etree.ElementTree as ElTree
-
-from copy import deepcopy
+import lxml.etree as etree
 
 import eval.storage as storage
 import eval.parser as parser
@@ -58,6 +56,14 @@ class Cell:
         self.mode = mode
         # changing mode allows different amounts of data to be stored
         # for each cell. speed vs memory usage
+        self._cell_element = cell_data
+        self._position = position
+        self.sheet = sheet
+        # these two below may be removed if deemed unneeded
+        self._cached_value = self.get_item('office:value')
+        # todo: _cached_text
+
+        '''
         with cell_data as self.cell_data:
             # cell data is ditched after init
             if self.mode == 'standard' or self.mode == 'formatted':
@@ -92,6 +98,94 @@ class Cell:
             # if so use alternate means to save space
             if self.mode == 'formatted':
                 pass  # formatting stuff to load if needed.
+            '''
+
+    @property
+    def library(self):
+        try:
+            return self.sheet.book.library
+        except AttributeError:
+            return None
+
+    @property
+    def file(self):
+        return self.sheet.book.file
+
+    @property
+    def book(self):
+        return self.sheet.book
+
+    @property
+    def map(self):
+        return self.file.map
+
+    @property
+    def has_contents(self):
+        if self._cell_element:
+            return True
+        else:
+            return False
+
+    @property
+    def data_type(self):
+        return self.get('office:value-type')
+
+    @property
+    def value(self):
+        return self.get('office:value')
+
+    @property
+    def cached_value(self):
+        return self._cached_value
+
+    @property
+    def text(self):
+        pass  # todo
+
+    @property
+    def cached_text(self):
+        pass  # todo
+
+    @property
+    def formula(self):
+        return self.get('table:formula')
+
+    @property
+    # keeping this identical to formula for the moment for historical
+    # reasons, might end up redoing this
+    def raw_formula(self):
+        return self.get('table:formula')
+
+    @property
+    def is_script(self):
+        if self.text[:len(PYSCRIPT_FLAG)] == PYSCRIPT_FLAG:
+            return True
+        else:
+            return False
+
+    @property
+    def script(self):
+        if self.text[:len(PYSCRIPT_FLAG)] == PYSCRIPT_FLAG:
+            return self.text[len(PYSCRIPT_FLAG):]
+        else:
+            return
+
+    @property
+    def a1(self):
+        return a1_from_xy(self.position)
+
+    @property
+    def position(self):
+        return self._position
+
+    @property
+    # returns the dependencies of self.
+    # may just have them be stored as standard
+    def dependencies(self):
+        return self.find_dependencies()
+
+    def get(self, string):
+        return self._cell_element.get(self.ns(string))
 
     def return_value(self):
         if self.has_contents:
@@ -227,6 +321,9 @@ class Cell:
         else:
             return ''
 
+    def ns(self, string):
+        return self.map.ns(string)
+
 
 class CellRange:
     def __init__(self, start_cell, end_cell):
@@ -275,36 +372,46 @@ class Book:
     # should not load cells until that function is called
     # then pass on relevant sub-dictionary to sheets that are created
     # so on
-    def __init__(self, library, file_name, element_tree):
-        self._file_name = file_name
+    def __init__(self, library, file, element_tree):
+        self.file = file
         self._element_tree = element_tree
         self.library = library
         self.sheets = {}
         self.sheet_list = []  # list of sheets, in order of file
 
-    def return_cell(self, *strings):
+    @property
+    def file_name(self):
+        return self.file.file_id
+
+    def return_cell(self, *strings):  # todo: replace this with
+                                    # iterator
         if strings[0] in self.sheets:
             pass
         elif strings[0] in self.sheet_list:
             if self.library.recursive:
-                self.library.files[self._file_name].load_cells(strings[0])
+                self.library.files[self.file_name].load_cells(strings[0])
             else:
                 raise SheetDataError('cell referenced a cell not in loaded'
                                      'sheet \'%s\'' % strings[0])
         else:
-            raise SheetDataError('could not find referenced sheet')
+            raise SheetDataError('could not find referenced sheet \'' +
+                                 str(strings[0]) + '\'')
         return self.sheets[strings[0]].return_cell(strings[1:])
 
-    def load(self, sheet):
-        # loads either specified sheet, or if sheet is None, all sheets
-        [self.add_sheet(Sheet(self, element))
-         for element in self._element_tree if
-         element.tag.endswith('table') and
-         sheet not in self.sheets and
-         (sheet.name == sheet or sheet is None)]
+    def load(self, sheet_to_load):
+        # load sheet of name (arg) or else load everything
+        if self._element_tree:
+            [self.add_sheet(Sheet(self, sheet))
+             for sheet in self._element_tree.findall(self.ns('table:table'))
+             if (sheet.items[self.ns('table:name')] == sheet or
+                 sheet_to_load is None)]
+        # check
 
     def add_sheet(self, sheet):
         self.sheets[sheet.name] = sheet
+
+    def ns(self, string):
+        return self.file.map.ns(string)
 
 
 class Sheet:
@@ -321,7 +428,7 @@ class Sheet:
 
     def load(self):
         row_elements = [element for element in self._tree if
-                    element.tag.endswith('row')]
+                        element.tag.endswith('row')]
         self._rows = [self._rows.append(Row(self, row_elements[y], y)) for
                       y in range(0, len(row_elements) - 1)]
 
@@ -347,8 +454,10 @@ class Row:
         return self._cells[x]
 
     def load(self):
-        [self._cells.append(create_cell(element)) for
-         element in self._tree if element.tag.endswith('cell')]
+        cell_elements = [element for element in self._tree
+                         if element.tag.endswith('cell')]
+        [self._cells.append(Cell(cell_elements[x], (x, self.y), self.sheet))
+         for x in range(0, len(cell_elements) - 1)]
 
 
 class Column:
@@ -396,12 +505,13 @@ class Library:
 
 class File:
     def __init__(self, file_address, library=None):
-        self.file = file_address
+        self.file_id = file_address
         self.body = None
+        self.map = None
         self.library = library
 
-        if self.file[:7] == 'file://':
-            self.file = self.file[7:]
+        if self.file_id[:7] == 'file://':
+            self.file_id = self.file_id[7:]
 
     def load(self, sheet_name=None):
         # load cell instances into
@@ -421,14 +531,17 @@ class File:
         #                   table-cell
 
         # create element tree by extracting xml file and parsing it
-        with zipfile.ZipFile(self.file).open('content.xml') as content:
-            data = ElTree.parse(content).getroot()
+        with zipfile.ZipFile(self.file_id).open('content.xml') as content:
+            data = etree.parse(content).getroot()
+
+            # get prefix map
+            self.map = Map(data.nsmap)
 
             # set library.books [file_address]
             # to book of appropriate data
-            if self.file not in self.library.books:
-                self.library.books[self.file] = \
-                    Book(self.library, self.file,
+            if self.file_id not in self.library.books:
+                self.library.books[self.file_id] = \
+                    Book(self.library, self,
                          [[level_2_entry for level_2_entry in level_1_entry
                            if level_2_entry.tag.endswith('spreadsheet')]
                           for level_1_entry in data
@@ -436,11 +549,24 @@ class File:
                          ######
                          [0][0])
                 #          __
-            self.library.books[self.file].load(sheet_name)
+            self.library.books[self.file_id].load(sheet_name)
 
 
-def create_cell(element):
+class Map:
+    # simple object for dealing with namespace mapping
+    def __init__(self, map_dictionary):
+        self.dict = map_dictionary
 
+    def ns(self, s):
+        # return string with prefix converted to namespace
+        # string:tag --> {namespace}tag
+        for x in range(0, len(s) - 1):
+            if s[x] == ':':
+                prefix = s[:x - 1]
+                suffix = s[x + 1:]
+                s = '{%s}%s' % (prefix, self.dict[suffix])
+                break
+        return s
 
 
 def a1_from_xy(pos):
@@ -458,7 +584,7 @@ def xy_from_a1(s):
     # returns x, y from inputted 'a1' string
     x = None
     y = None
-    for a in len(s):
+    for a in range(0, len(s)):
         if s[a - 1] in storage.ENGLISH_ALPHABET and \
                 s[a] in storage.ARABIC_NUMBERS:
             x = s[:a]
@@ -565,3 +691,5 @@ def find_unquoted(target, string, back=False, list_mode=False):
             if not 0 <= index < len(string) - target_length:
                 return
         return index
+
+PYSCRIPT_FLAG = 'py='
