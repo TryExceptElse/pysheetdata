@@ -58,11 +58,14 @@ class Cell:
         # for each cell. speed vs memory usage
         self._cell_element = cell_data
         self._position = position
+        self._cached_position = position
         self.sheet = sheet
-        # these two below may be removed if deemed unneeded
-        self._cached_value = self.get_item('office:value')
-        # todo: _cached_text
+        # stores new values, without applying them to _cell_element
+        self._new_attrib = {}
+        self._new_text = None
 
+        # obsolete code, kept for purpose of making sure all old
+        # attributes have been handled - to be deleted once working
         '''
         with cell_data as self.cell_data:
             # cell data is ditched after init
@@ -130,21 +133,37 @@ class Cell:
     def data_type(self):
         return self.get('office:value-type')
 
+    @data_type.setter
+    def data_type(self, value):
+        self.set('office:value-type', value)
+
     @property
     def value(self):
         return self.get('office:value')
 
+    @value.setter
+    def value(self, value):
+        self.set('office:value', value)
+
     @property
     def cached_value(self):
-        return self._cached_value
+        # always returns original value
+        return self.get('office:value', True)
 
     @property
     def text(self):
-        pass  # todo
+        # text getter/setter is different from other attributes because
+        # it is stored separately in the xml file
+        return self._cell_element.text
+
+    @text.setter
+    def text(self, string):
+        if string != self.text:
+            self._new_text = string
 
     @property
     def cached_text(self):
-        pass  # todo
+        return self._cell_element.text
 
     @property
     def formula(self):
@@ -158,34 +177,60 @@ class Cell:
 
     @property
     def is_script(self):
-        if self.text[:len(PYSCRIPT_FLAG)] == PYSCRIPT_FLAG:
+        if self.text.startswith(PYSCRIPT_FLAG):
             return True
         else:
             return False
 
     @property
     def script(self):
-        if self.text[:len(PYSCRIPT_FLAG)] == PYSCRIPT_FLAG:
+        if self.is_script:
             return self.text[len(PYSCRIPT_FLAG):]
-        else:
-            return
+
+    @script.setter
+    def script(self, script_string):
+        self.text = PYSCRIPT_FLAG + script_string
 
     @property
     def a1(self):
         return a1_from_xy(self.position)
 
+    @a1.setter
+    def a1(self, a1_string):
+        self.position = xy_from_a1(a1_string)
+
     @property
     def position(self):
         return self._position
 
+    @position.setter
+    def position(self, tuple_or_list):
+        self.position = (tuple_or_list[0], tuple_or_list[1])
+
+    @property
+    def cached_position(self):
+        return self._cached_position
+
     @property
     # returns the dependencies of self.
     # may just have them be stored as standard
+    # I -don't think- this needs to be sent over to _new_attrib, but
+    # if that proves to be the case, this will need to be updated.
     def dependencies(self):
         return self.find_dependencies()
 
-    def get(self, string):
-        return self._cell_element.get(self.ns(string))
+    def get(self, string, cached=False):
+        # if string is not in dictionary of changes, get the loaded val
+        string = self.ns(string)
+        if string in self._new_attrib and not cached:
+            return self._new_attrib[string]
+        else:
+            return self._cell_element.get(string)
+
+    def set(self, key, entry):
+        key = self.ns(key)
+        if entry != self.get(key):
+            self._new_attrib[key] = entry
 
     def return_value(self):
         if self.has_contents:
