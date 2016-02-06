@@ -1,7 +1,9 @@
 import main
+import os
 
-test_library = main.Library(['file:///home/user3/PycharmProjects/pysheetdata/'
-                             'testdata/test1.ods'], True)
+test_address = os.path.abspath('testdata/test2.ods')
+
+test_library = main.Library([test_address], True)
 
 for sheet in test_library.books:
     print(sheet)

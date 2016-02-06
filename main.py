@@ -426,10 +426,14 @@ class Book:
 
     def load(self, sheet_to_load):
         # load sheet of name (arg) or else load everything
-        if self._element_tree:
+        # from xml module, response to simple 'if self._element_tree';
+        # "FutureWarning: The behavior of this method will change in
+        # future versions. Use specific 'len(elem)' or
+        # 'elem is not None' test instead."
+        if self._element_tree is not None:
             [self.add_sheet(Sheet(self, sheet))
              for sheet in self._element_tree.findall(self.ns('table:table'))
-             if (sheet.items[self.ns('table:name')] == sheet or
+             if (sheet.attrib[self.ns('table:name')] == sheet_to_load or
                  sheet_to_load is None)]
         # check
 
@@ -445,7 +449,7 @@ class Sheet:
         self._rows = []
         self._columns = []
         self._tree = element_tree  # matrix of cells
-        self._attributes = self._tree.attrib()
+        self._attributes = self._tree.attrib
         self.book = book
         self.name = [self._attributes[attribute]
                      for attribute in self._attributes
@@ -539,6 +543,9 @@ class File:
         if self.file_id[:7] == 'file://':
             self.file_id = self.file_id[7:]
 
+        if library is None:
+            self.library = Library([file_address])
+
     def load(self, sheet_name=None):
         # load cell instances into
         #
@@ -561,24 +568,24 @@ class File:
             data = etree.parse(content).getroot()
 
             # get prefix map
-            self.map = Map(data.nsmap)
+            self.map = NSMap(data.nsmap)
 
             # set library.books [file_address]
             # to book of appropriate data
             if self.file_id not in self.library.books:
+                body_element = data.find(self.ns('office:body'))
+                spreadsheet_element = body_element.find(self.ns(
+                        'office:spreadsheet'))
                 self.library.books[self.file_id] = \
-                    Book(self.library, self,
-                         [[level_2_entry for level_2_entry in level_1_entry
-                           if level_2_entry.tag.endswith('spreadsheet')]
-                          for level_1_entry in data
-                          if level_1_entry.tag.endswith('body')]
-                         ######
-                         [0][0])
-                #          __
+                    Book(self.library, self, spreadsheet_element)
+
             self.library.books[self.file_id].load(sheet_name)
 
+    def ns(self, string):
+        return self.map.ns(string)
 
-class Map:
+
+class NSMap:
     # simple object for dealing with namespace mapping
     def __init__(self, map_dictionary):
         self.dict = map_dictionary
@@ -588,9 +595,9 @@ class Map:
         # string:tag --> {namespace}tag
         for x in range(0, len(s) - 1):
             if s[x] == ':':
-                prefix = s[:x - 1]
+                prefix = s[:x]
                 suffix = s[x + 1:]
-                s = '{%s}%s' % (prefix, self.dict[suffix])
+                s = '{%s}%s' % (self.dict[prefix], suffix)
                 break
         return s
 
