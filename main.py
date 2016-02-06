@@ -90,7 +90,8 @@ class Cell:
 
     @property
     def has_contents(self):
-        if self._cell_element:
+        if self._cell_element is not None:  # for etree reasons, cannot
+                # just use self._cell_element
             return True
         else:
             return False
@@ -125,7 +126,9 @@ class Cell:
     def text(self):
         # text getter/setter is different from other attributes because
         # it is stored separately in the xml file
-        return self._cell_element.text
+        if self._new_text is not None:
+            return self._new_text
+        return self._cell_element[0].text
 
     @text.setter
     def text(self, string):
@@ -135,7 +138,7 @@ class Cell:
 
     @property
     def cached_text(self):
-        return self._cell_element.text
+        return self._cell_element[0].text
 
     @property
     # this is the formula as modified to appear as it does as typed
@@ -414,6 +417,7 @@ class Book:
         return self.file.file_id
 
     def __getitem__(self, item):
+        item = item.lower()
         if item in self.sheets:
             pass
         elif item in self.sheet_list:
@@ -424,13 +428,7 @@ class Book:
                                ' but not loaded, and recursive loading is'
                                ' not enabled')
         else:
-            extra_message = None
-            for sheet in self.sheets:
-                if sheet.lower() == item.lower():
-                    extra_message = 'a sheet named ' + sheet + ' exists ' \
-                         'however. sheets are case sensitive'
-            raise KeyError(str(item) + ' is not in Book ' + self.file_name +
-                           extra_message)
+            raise KeyError(str(item) + ' is not in Book ' + self.file_name)
         return self.sheets[item]
 
     def load(self, sheet_to_load):
@@ -447,7 +445,7 @@ class Book:
         # check
 
     def add_sheet(self, sheet):
-        self.sheets[sheet.name] = sheet
+        self.sheets[sheet.name.lower()] = sheet
 
     def ns(self, string):
         return self.file.map.ns(string)
@@ -474,6 +472,7 @@ class Sheet:
         row_elements = self._tree.findall(self.ns('table:table-row'))
         [self._rows.append(Row(self, y, row_elements[y])) for y in
          range(0, len(row_elements))]
+        self._loaded = True
 
     def __getitem__(self, item):
         # if item is tuple or list, return the referenced cell
@@ -481,14 +480,15 @@ class Sheet:
         # if item is int, return the referenced row
         name = item.__class__.__name__
         # if self is not yet loaded, do that now
-        self.load()
+        if not self._loaded:
+            self.load()
         if name == 'tuple' or name == 'list':
             x, y = item
         elif name == 'str':
             x, y = xy_from_a1(item)
         else:
             try:
-                y = int(item)
+                y = item
             except:
                 raise KeyError(str(item) + ' is not a valid key for sheet ' +
                                self.name)
@@ -514,10 +514,13 @@ class Row:
         return self._cells[item]
 
     def load(self):
-        cell_elements = [element for element in self._tree
-                         if element.tag.endswith('cell')]
+        cell_elements = self._tree.findall(self.ns('table:table-cell'))
         [self._cells.append(Cell(cell_elements[x], (x, self.y), self.sheet))
-         for x in range(0, len(cell_elements) - 1)]
+         for x in range(0, len(cell_elements))]
+        self._loaded = True
+
+    def ns(self, string):
+        return self.sheet.book.file.map.ns(string)
 
 
 class Column:
@@ -529,18 +532,18 @@ class Column:
 class Library:
     def __init__(self, list_of_addresses, recursive_loading=False):
         self.list = list_of_addresses
-        self.files = [File(address, self) for address in self.list]
+        self.files = {address: File(address, self) for address in self.list}
         self.books = {}
         self.recursive = recursive_loading
 
-        [file.load() for file in self.files]
+        [self.files[file].load() for file in self.files]
 
     def load_books(self):
         for book_name in self.list:
             self.load_book(book_name)
 
     def load_book(self, book_name):
-        self.files[book_name] = File(book_name)
+        self.files[book_name] = File(book_name, self)
         self.files[book_name].load()
 
     def __getitem__(self, item):
