@@ -286,7 +286,9 @@ class Cell:
                 range_end = reference[index + 1:]
         if reference_type == 'cell':
             reference_parts = break_apart_reference(reference)
-            return self.sheet.book.library.return_cell(reference_parts)
+            return self.sheet.book.library[reference_parts[0]][
+                                           reference_parts[1]][
+                                           reference_parts[2]]
         elif reference_type == 'range':
             start_parts = break_apart_reference(range_start)
             start_parts = self.complete_reference_parts(
@@ -295,10 +297,12 @@ class Cell:
             end_parts = self.complete_reference_parts(
                     end_parts)
             return CellRange(
-                self.sheet.book.library.return_cell(
-                        start_parts),
-                self.sheet.book.library.return_cell(
-                        end_parts)
+                self.sheet.book.library[start_parts[0]]
+                                       [start_parts[1]]
+                                       [start_parts[2]],
+                self.sheet.book.library[end_parts[0]]
+                                       [end_parts[1]]
+                                       [end_parts[2]]
             )
 
     def complete_reference_parts(self, parts):
