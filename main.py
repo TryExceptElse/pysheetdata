@@ -409,8 +409,7 @@ class Book:
     def file_name(self):
         return self.file.file_id
 
-    def return_cell(self, *strings):  # todo: replace this with
-                                    # iterator
+    def return_cell(self, *strings):
         if strings[0] in self.sheets:
             pass
         elif strings[0] in self.sheet_list:
@@ -423,6 +422,20 @@ class Book:
             raise SheetDataError('could not find referenced sheet \'' +
                                  str(strings[0]) + '\'')
         return self.sheets[strings[0]].return_cell(strings[1:])
+
+    def __getitem__(self, item):
+        if item in self.sheets:
+            pass
+        elif item in self.sheet_list:
+            if self.library.recursive:
+                self.load(item)
+            else:
+                raise KeyError(str(item) + ' is in Book ' + self.file_name +
+                               ' but not loaded, and recursive loading is'
+                               ' not enabled')
+        else:
+            raise KeyError(str(item) + ' is not in Book ' + self.file_name)
+        return self.sheets[item]
 
     def load(self, sheet_to_load):
         # load sheet of name (arg) or else load everything
@@ -470,6 +483,25 @@ class Sheet:
             y = strings[1]
         return self._rows[y].return_cell(x)
 
+    def __getitem__(self, item):
+        # if item is tuple or list, return the referenced cell
+        # if item is string, convert it from a1 and return the cell
+        # if item is int, return the referenced row
+        name = item.__class__.__name__
+        if name == 'tuple' or name == 'list':
+            x, y = item
+        elif name == 'string':
+            x, y = xy_from_a1(item)
+        else:
+            try:
+                y = int(item)
+            except:
+                raise KeyError(str(item) + ' is not a valid key for sheet ' +
+                               self.name)
+            else:
+                return self._rows[y]
+        return self._rows[y][x]
+
 
 class Row:
     def __init__(self, sheet, y, tree):
@@ -483,6 +515,11 @@ class Row:
             self.load()
         return self._cells[x]
 
+    def __getitem__(self, item):
+        if not self._cells:
+            self.load()
+        return self._cells[item]
+
     def load(self):
         cell_elements = [element for element in self._tree
                          if element.tag.endswith('cell')]
@@ -491,7 +528,9 @@ class Row:
 
 
 class Column:
-    pass  # not used yet
+    pass  # not used yet, here because it exists in spreadsheet xml
+    # files and is used for formatting + possibly other uses. May be
+    # utilized in the future
 
 
 class Library:
@@ -529,8 +568,38 @@ class Library:
                     raise SheetDataError('cell referenced cell not in loaded'
                                          'book')
             except:
-                raise SheetDataError('could not find referenced book')
+                error_string = 'could not find referenced book' + str(
+                        strings[0])
+                raise SheetDataError(error_string)
         return book.return_cell(strings[1:])
+
+    def __getitem__(self, item):
+        # the new improved method for returning cells / books / sheets
+        # should supplant return_cell method
+        if item in self.books:
+            book = self.books[item]
+        elif '/' not in item and \
+             any([book_name.endswith(item) for book_name in self.books]):
+            # if there are no backspaces in item string, and one of the
+            # library's books ends with the string 'item,'
+            # that's the book
+            book = [self.books[book_name] for book_name in self.books if
+                    book_name.endswith(item)][0]
+            # this has the potential for bugs, should be refined in the
+            # future
+        elif self.recursive:
+            try:
+                self.load_book(item)
+                book = self.books[item]
+            except:
+                error_string = 'could not find referenced book' + str(
+                       item)
+                raise SheetDataError(error_string)
+        else:
+            error_string = 'cell referenced cell not in loaded'\
+                                         'book' + str(item)
+            raise SheetDataError(error_string)
+        return book
 
 
 class File:
