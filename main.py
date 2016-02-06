@@ -409,20 +409,6 @@ class Book:
     def file_name(self):
         return self.file.file_id
 
-    def return_cell(self, *strings):
-        if strings[0] in self.sheets:
-            pass
-        elif strings[0] in self.sheet_list:
-            if self.library.recursive:
-                self.library.files[self.file_name].load_cells(strings[0])
-            else:
-                raise SheetDataError('cell referenced a cell not in loaded'
-                                     'sheet \'%s\'' % strings[0])
-        else:
-            raise SheetDataError('could not find referenced sheet \'' +
-                                 str(strings[0]) + '\'')
-        return self.sheets[strings[0]].return_cell(strings[1:])
-
     def __getitem__(self, item):
         if item in self.sheets:
             pass
@@ -485,14 +471,6 @@ class Sheet:
         [self._rows.append(Row(self, y, row_elements[y])) for y in
          range(0, len(row_elements))]
 
-    def return_cell(self, *strings):
-        if len(strings) == 1:
-            x, y = xy_from_a1(strings[0])
-        else:
-            x = strings[0]
-            y = strings[1]
-        return self._rows[y].return_cell(x)
-
     def __getitem__(self, item):
         # if item is tuple or list, return the referenced cell
         # if item is string, convert it from a1 and return the cell
@@ -525,11 +503,6 @@ class Row:
         self._tree = tree
         self._cells = []
         self._loaded = False
-
-    def return_cell(self, x):
-        if not self._cells:
-            self.load()
-        return self._cells[x]
 
     def __getitem__(self, item):
         if not self._loaded:
@@ -565,29 +538,6 @@ class Library:
     def load_book(self, book_name):
         self.files[book_name] = File(book_name)
         self.files[book_name].load()
-
-    def return_cell(self, *strings):
-        # takes either xy or a1 cell ref
-        # book, sheet, (row, cell) or (cell a1 ref)
-        if strings[0] in self.books:
-            book = self.books[strings[0]]
-        elif '/' not in strings[0] and \
-             any([book_name.endswith(strings[0]) for book_name in self.books]):
-            book = [self.books[book_name] for book_name in self.books if
-                    book_name.endswith(strings[0])][0]
-        else:
-            try:
-                if self.recursive:
-                    self.load_book(strings[0])
-                    book = self.books[strings[0]]
-                else:
-                    raise SheetDataError('cell referenced cell not in loaded'
-                                         'book')
-            except:
-                error_string = 'could not find referenced book' + str(
-                        strings[0])
-                raise SheetDataError(error_string)
-        return book.return_cell(strings[1:])
 
     def __getitem__(self, item):
         # the new improved method for returning cells / books / sheets
