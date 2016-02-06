@@ -434,7 +434,13 @@ class Book:
                                ' but not loaded, and recursive loading is'
                                ' not enabled')
         else:
-            raise KeyError(str(item) + ' is not in Book ' + self.file_name)
+            extra_message = None
+            for sheet in self.sheets:
+                if sheet.lower() == item.lower():
+                    extra_message = 'a sheet named ' + sheet + ' exists ' \
+                         'however. sheets are case sensitive'
+            raise KeyError(str(item) + ' is not in Book ' + self.file_name +
+                           extra_message)
         return self.sheets[item]
 
     def load(self, sheet_to_load):
@@ -461,8 +467,9 @@ class Sheet:
     def __init__(self, book, element_tree):
         self._rows = []
         self._columns = []
-        self._tree = element_tree  # matrix of cells
+        self._tree = element_tree
         self._attributes = self._tree.attrib
+        self._loaded = False
         self.book = book
         self.name = [self._attributes[attribute]
                      for attribute in self._attributes
@@ -470,10 +477,13 @@ class Sheet:
                      attribute.endswith('name')][0]
 
     def load(self):
-        row_elements = [element for element in self._tree if
-                        element.tag.endswith('row')]
-        self._rows = [self._rows.append(Row(self, row_elements[y], y)) for
-                      y in range(0, len(row_elements) - 1)]
+        # row_elements = [element for element in self._tree if
+        #                 element.tag.endswith('row')]
+        # self._rows = [self._rows.append(Row(self, row_elements[y], y)) for
+        #               y in range(0, len(row_elements) - 1)]
+        row_elements = self._tree.findall(self.ns('table:table-row'))
+        [self._rows.append(Row(self, y, row_elements[y])) for y in
+         range(0, len(row_elements))]
 
     def return_cell(self, *strings):
         if len(strings) == 1:
@@ -488,9 +498,11 @@ class Sheet:
         # if item is string, convert it from a1 and return the cell
         # if item is int, return the referenced row
         name = item.__class__.__name__
+        # if self is not yet loaded, do that now
+        self.load()
         if name == 'tuple' or name == 'list':
             x, y = item
-        elif name == 'string':
+        elif name == 'str':
             x, y = xy_from_a1(item)
         else:
             try:
@@ -502,6 +514,9 @@ class Sheet:
                 return self._rows[y]
         return self._rows[y][x]
 
+    def ns(self, string):
+        return self.book.file.map.ns(string)
+
 
 class Row:
     def __init__(self, sheet, y, tree):
@@ -509,6 +524,7 @@ class Row:
         self.sheet = sheet
         self._tree = tree
         self._cells = []
+        self._loaded = False
 
     def return_cell(self, x):
         if not self._cells:
@@ -516,7 +532,7 @@ class Row:
         return self._cells[x]
 
     def __getitem__(self, item):
-        if not self._cells:
+        if not self._loaded:
             self.load()
         return self._cells[item]
 
