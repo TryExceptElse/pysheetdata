@@ -217,16 +217,14 @@ class Cell:
             self._new_attrib[key] = entry
 
     def return_value(self):
-        # candidate for deletion once code has been reconstituted to not
-        # need these non-property getters/setters
+        # candidate for deletion once code has been reconstituted to
+        # not need these non-decorator property getters/setters
         return self.value
 
     def return_script(self):
         # considering simply adding 'self.script' to cell
         if self.is_script:
             return self.text[3:]
-        else:
-            return None
 
     def find_dependencies(self):
         # returns dictionary of referenced cells with reference as key

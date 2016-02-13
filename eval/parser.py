@@ -104,7 +104,7 @@ def parse(s, function=None):
         for reference in global_file.formulas:
             while reference in s:
                 s = s.replace(reference, str(
-                    global_file.formulas[reference].return_value()
+                    global_file.formulas[reference].value()
                 ))
         exec_string = s
 

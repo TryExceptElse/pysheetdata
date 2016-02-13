@@ -41,4 +41,3 @@ class TestLibrary(TestCase):
                 print('response: %s, correct: %s %s' %
                       (response, correct, extra))
             self.fail('incorrect text entries are being returned')
-
