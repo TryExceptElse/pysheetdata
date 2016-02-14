@@ -20,7 +20,10 @@ class TestCell(TestCase):
         test_library = main.Library([test_address], True)
 
         tests = [
-            (test_library[test_address]['Sheet1']['c2'].content, 'cell2')
+            (test_library[test_address]['Sheet1']['b2'].content, 'cell1'),
+            (test_library[test_address]['Sheet1']['c2'].content, 'cell2'),
+            (test_library[test_address]['Sheet1']['d2'].content, 'cell1'),
+            (test_library[test_address]['Sheet1']['e2'].content, 'test cell'),
         ]
 
         for test in tests:
