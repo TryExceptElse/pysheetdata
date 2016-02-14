@@ -83,7 +83,7 @@ useful cell properties:
 
 .cached_position : returns the position of the cell as it was loaded from the workbook
 
-.dependencies : returns the dependencies of the cell, either that are in its formula, or a script that uses cells['ref']
+.dependencies : returns dictionary of the dependencies referenced either in its formula, or a script that uses cells['ref']
 
 note on dependencies:
 
@@ -108,6 +108,7 @@ The properties available for ranges are:
 
 .value : returns the combined sum of all cells within the range
 
-.dependencies : returns the list of cells and ranges that are dependencies of any of the cells in the range
+.dependencies : returns the dictionary of cells and ranges that are
+dependencies of any of the cells in the range
 
 
