@@ -203,7 +203,8 @@ class Cell:
         return self._cached_position
 
     @property
-    # returns the dependencies of self.
+    # returns dictionary of dependencies of self.
+    # referencing string is key
     # may just have them be stored as standard
     # I -don't think- this needs to be sent over to _new_attrib, but
     # if that proves to be the case, this will need to be updated.
@@ -418,6 +419,8 @@ class CellRange:
 
     @property
     def dependencies(self):
+        # returns dictionary of dependencies
+        # reference string is key, referenced cell or range is value
         d = {}
         for sheet in self.matrix:
             for row in sheet:
