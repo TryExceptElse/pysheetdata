@@ -1,4 +1,6 @@
-# pysheetdata
+=======================================================================
+pysheetdata
+=======================================================================
 For extracting and working with spreadsheet data
 
 
@@ -6,7 +8,8 @@ WARNING: PYSHEETDATA IS NOT SECURE AGAINST MALICIOUSLY CONSTRUCTED DATA
 
 it is intended to be used only with data that is trusted to not have been built to exploit potential security holes
 
-# Updates:
+Updates:
+===
 
 As of 2/13/16 - basic functionality achieved.
 
@@ -21,10 +24,12 @@ Can parse cell formulas to return their value. Very few excel functions are curr
 While basic functions of this module are complete, for the most part it should be considered highly unfinished, and relied (or not relied) upon with this in mind
 
 
-=======================================================================
-# Basic use:
 
-# Libraries / Books / Sheets
+Basic use:
+=======================================================================
+
+Libraries / Books / Sheets
+=======================================================================
 
 Library(list of addresses, enable recursive loading) : initialize Library
 
@@ -43,13 +48,12 @@ cell = lib[book_address]['Sheet1'][(3, 1)] : return same cell as above, in xy fo
 
 cell = lib[book_address]['Sheet1'][1][3] : return same cell again, via getting first row, then cell in row: note the order has reversed
 
-# Cells
+Cells
+=======================================================================
 
 useful cell properties:
 
 .library : If present, returns the library that has loaded the cell, otherwise returns none
-
-.file : returns the file object that loaded the book
 
 .book : returns the book object the cell belongs to
 
@@ -73,7 +77,7 @@ useful cell properties:
 
 .a1 : returns the a1 style position of the cell within its sheet
 
-.position : returns the x, y position of the cell within its sheet (in this format, 'a1' = (0, 0)
+.position : returns the x, y position of the cell within its sheet. In this format, 'a1' = (0, 0)
 
 .cached_position : returns the position of the cell as it was loaded from the workbook
 
@@ -86,7 +90,9 @@ Dependencies can be either a cell, or a range object. Ranges have less data avai
 
 
 
-# Ranges
+Ranges
+=======================================================================
+
 Ranges can be within a single column or row, or even 3d ranges that stretch across multiple sheets.
 
 everything in this module is likely to contain bugs, but ranges particuarly so as they have not yet been tested. Wait for 
