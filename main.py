@@ -385,28 +385,52 @@ class CellRange:
         }
         for pair in indexes:
             indexes[pair].sort()
-        self.matrix = []
+        self._matrix = []
         for sheet in start_cell.sheet.book.sheet_list[indexes['sheets'][0]:
                                                       indexes['sheets'][1]]:
             sheet_matrix = []
-            self.matrix.append(sheet_matrix)
+            self._matrix.append(sheet_matrix)
             for row in sheet.matrix[indexes['rows'][0]:indexes['rows'][1]]:
                 row_matrix = []
                 sheet_matrix.append(row_matrix)
                 for cell in row[indexes['cells'][0]:indexes['cells'][1]]:
                     row_matrix.append(cell)
 
-    def return_value(self):
+    @property
+    def matrix(self):
+        return self._matrix
+
+    @matrix.setter
+    def matrix(self, matrix):
+        self._matrix = matrix
+
+    @property
+    def cells(self):
+        cells = []
+        [[[cells.append(cell) for cell in row] for row in sheet] for sheet in
+         self.matrix]
+        return cells
+
+    @property
+    def value(self):
         return sum([sum([sum([cell.return_value() for cell in row])
                    for row in sheet]) for sheet in self.matrix])
 
-    def find_dependencies(self):
+    @property
+    def dependencies(self):
         d = {}
         for sheet in self.matrix:
             for row in sheet:
                 for cell in row:
                     d.update(cell.find_dependencies())
         return d
+
+    def return_value(self):
+        # returns the combined sum of all cells in the range
+        return self.value
+
+    def find_dependencies(self):
+        return self.dependencies
 
     def evaluate(self):  # evaluates each cell in matrix
         [[[cell.evaluate() for cell in row]
