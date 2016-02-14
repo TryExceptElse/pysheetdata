@@ -23,6 +23,8 @@ Can parse cell formulas to return their value. Very few excel functions are curr
 
 While basic functions of this module are complete, for the most part it should be considered highly unfinished, and relied (or not relied) upon with this in mind
 
+Currently, has only been designed for .ods files. other types may follow, but priority is simply on getting optimal functionality with this file type.
+
 
 
 Basic use:
