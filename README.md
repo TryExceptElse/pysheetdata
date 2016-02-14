@@ -83,13 +83,15 @@ note on dependencies:
 
 Dependencies can be either a cell, or a range object. Ranges have less data available than a cell.
 
+
+
+
+# Ranges
 Ranges can be within a single column or row, or even 3d ranges that stretch across multiple sheets.
 
 everything in this module is likely to contain bugs, but ranges particuarly so as they have not yet been tested. Wait for 
 another commit or two. Or help out and get these working smoothly!
 
-
-# Ranges
 The properties available for ranges are:
 
 .matrix : returns the matrix of cells in a 3 dimensional matrix of sheet, row, cell. When using, remember the sheet dimension
