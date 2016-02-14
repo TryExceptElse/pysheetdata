@@ -105,6 +105,20 @@ class Cell:
         self.set('office:value-type', value)
 
     @property
+    def content(self):
+        if self.data_type == 'string' and not self.script:
+            return self.text
+        else:
+            return self.value
+
+    @content.setter
+    def content(self, content):
+        try:
+            self.value = float(content)
+        except ValueError:
+            self.text = content
+
+    @property
     def value(self):
         # at the moment, reevaluates all cells in dependency tree
         # in the future, once dependants and change flags are
@@ -142,9 +156,9 @@ class Cell:
 
     @property
     # this is the formula as modified to appear as it does as typed
-    # by a user in the spreadsheet program
+    # by a user in the spreadsheet program (...eventually)
     def formula(self):
-        return self.get('table:formula')
+        return self.get('table:formula')[3:]
 
     @property
     # this is the formula as stored in the xml file, with formatting
@@ -247,7 +261,7 @@ class Cell:
                         start = x
                     elif self.raw_formula[x] == ']' and not is_quote:
                         # set reference string
-                        reference = self.raw_formula[start + 1: x - 1]
+                        reference = self.raw_formula[start + 1: x]
                         # set default values, will be changed in a
                         # moment if needed
                         dependencies['[' + reference + ']'] = \
@@ -287,6 +301,7 @@ class Cell:
                 range_end = reference[index + 1:]
         if reference_type == 'cell':
             reference_parts = break_apart_reference(reference)
+            reference_parts = self.complete_reference_parts(reference_parts)
             return self.sheet.book.library[reference_parts[0]][
                                            reference_parts[1]][
                                            reference_parts[2]]
@@ -324,16 +339,17 @@ class Cell:
             if scripts and self.return_script():
                 self.run_script(self.dependencies)
             elif self.raw_formula:
-                evaluation = parser.evaluate(self.raw_formula,
+                evaluation = parser.evaluate(self.formula,
                                              self.dependencies)
                 # if returned is value, put it in self.value
                 # if that doesn't work, put it in self.string
                 try:
                     self.value = float(evaluation)
-                except TypeError:
+                except ValueError:
                     try:
                         self.text = str(evaluation)
-                    except TypeError:
+                    except ValueError:
+                        print('could not set new value')
                         pass
 
     def run_script(self, dependencies):
@@ -563,7 +579,7 @@ class Library:
                 self.load_book(item)
                 book = self.books[item]
             except:
-                error_string = 'could not find referenced book' + str(
+                error_string = 'could not find referenced book ' + str(
                        item)
                 raise SheetDataError(error_string)
         else:
@@ -655,6 +671,7 @@ def a1_from_xy(pos):
 
 def xy_from_a1(s):
     # returns x, y from inputted 'a1' string
+    s = s.lower()
     x = None
     y = None
     for a in range(0, len(s)):
@@ -727,10 +744,10 @@ def break_apart_reference(s):
     # now try to find the #$
     hd = find_unquoted('#$', s, True)
     if hd is None:
-        parts.append(s[:dot - 1])
+        parts.append(s[:dot])
     else:
-        parts.append(s[hd + 1: dot - 1])
-        parts.append(s[:hd - 1])
+        parts.append(s[hd + 2: dot])
+        parts.append(s[:hd])
     # reverse order to go book, sheet, cell rather than the reverse
     return list(reversed(parts))
 
@@ -756,19 +773,18 @@ def find_unquoted(target, string, back=False, list_mode=False):
                 index += motion
                 while string[index] != "'":
                     index += motion
-            elif string[index: string + target_length - 1] == target:
+            elif string[index: index + target_length] == target:
                 matches.append(index)
             index += motion
-            if not 0 <= index < len(string) - target_length:
-                return
+        return matches
     else:
-        while string[index: index + target_length - 1] != target:
+        while string[index: index + target_length] != target:
             if string[index] == "'":
                 index += motion
                 while string[index] != "'":
                     index += motion
             index += motion
-            if not 0 <= index < len(string) - target_length:
+            if not 0 <= index < len(string):
                 return
         return index
 

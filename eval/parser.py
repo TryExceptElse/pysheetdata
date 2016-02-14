@@ -101,11 +101,16 @@ def parse(s, function=None):
         exec_string = '%s(body_strings)' % function
     else:
         # replace references with values and find result
+        s = s.lower()
         for reference in global_file.formulas:
-            while reference in s:
-                s = s.replace(reference, str(
-                    global_file.formulas[reference].value()
-                ))
+            while reference.lower() in s:
+                replacement_cell = global_file.formulas[reference]
+                if replacement_cell.data_type == 'string' and \
+                        not replacement_cell.script:
+                    replacement = '\'%s\'' % replacement_cell.text
+                else:
+                    replacement = replacement_cell.value
+                s = s.replace(reference.lower(), replacement)
         exec_string = s
 
     exec_string = eval_append(exec_string)
