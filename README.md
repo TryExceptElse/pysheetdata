@@ -6,6 +6,8 @@ WARNING: PYSHEETDATA IS NOT SECURE AGAINST MALICIOUSLY CONSTRUCTED DATA
 
 it is intended to be used only with data that is trusted to not have been built to exploit potential security holes
 
+# Updates:
+
 As of 2/13/16 - basic functionality achieved.
 
 Can load workbooks or groups of workbooks in 'libraries'
