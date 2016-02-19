@@ -361,7 +361,7 @@ class Cell:
             script.formula = None
             script.text = self.text
             script.cells = dependencies
-            script_string = self.text[3:len(self.text)]
+            script_string = self.script
             exec(script_string)
         else:
             return ''
