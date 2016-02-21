@@ -2,6 +2,8 @@
 functions that mirror those in excel, and operate (ideally) the same
 
 imported by eval.parser
+
+todo:
 """
 
 import eval.storage as global_file
@@ -32,18 +34,15 @@ def py_count(args):
         if arg in global_file.formulas:
             ref = global_file.formulas[arg]
 
-            def count(cell):
-                if cell.data_type == 'float' or cell.data_type == 'int':
+            def count(cell_ob):
+                if cell_ob.data_type == 'float' or cell_ob.data_type == 'int':
                     return 1
                 else:
                     return 0
 
-            if ref.__class__
+            if ref.__class__.__name__ == 'Cell':
                 count += count(ref)
             else:
                 for cell in ref.cells:
-                    count += count(ref)
-
-"""
-todo:
-"""
+                    count += count(cell)
+    return count
