@@ -203,6 +203,14 @@ class Cell:
         return self._cached_position
 
     @property
+    def column(self):
+        return self.sheet.columns[self.position[0]]
+
+    @property
+    def row(self):
+        return self.sheet[self.position[1]]
+
+    @property
     # returns dictionary of dependencies of self.
     # referencing string is key
     # may just have them be stored as standard
@@ -231,21 +239,11 @@ class Cell:
         if entry != self.get(key):
             self._new_attrib[key] = entry
 
-    def return_value(self):
-        # candidate for deletion once code has been reconstituted to
-        # not need these non-decorator property getters/setters
-        return self.value
-
-    def return_script(self):
-        # considering simply adding 'self.script' to cell
-        if self.is_script:
-            return self.text[3:]
-
     def find_dependencies(self):
         # returns dictionary of referenced cells with reference as key
         # if reference is a range (like 'A1:B2') returns matrix
         if not self.has_contents or (self.raw_formula is None and
-                                     self.return_script() is None):
+                                     self.script is None):
             return {}
         else:
             dependencies = {}
@@ -267,9 +265,9 @@ class Cell:
                         # moment if needed
                         dependencies['[' + reference + ']'] = \
                             self.cell_from_reference(reference)
-            if self.return_script() is not None:
+            if self.script is not None:
                 start = None
-                script_s = self.return_script()
+                script_s = self.script
                 # fixing text prop will fix the above error warning
                 # (if no warning, I forgot to remove this after fixing)
                 for x in range(0, len(script_s)):
@@ -337,7 +335,7 @@ class Cell:
             if recursive:
                 for cell in self.dependencies:
                     self.dependencies[cell].evaluate()
-            if scripts and self.return_script():
+            if scripts and self.script:
                 self.run_script(self.dependencies)
             elif self.raw_formula:
                 evaluation = parser.evaluate(self.formula,
@@ -414,7 +412,7 @@ class CellRange:
 
     @property
     def value(self):
-        return sum([sum([sum([cell.return_value() for cell in row])
+        return sum([sum([sum([cell.value for cell in row])
                    for row in sheet]) for sheet in self.matrix])
 
     @property
@@ -505,15 +503,32 @@ class Sheet:
                      if not attribute.endswith('style-name') and
                      attribute.endswith('name')][0]
 
+    @property
+    def columns(self):
+        return self._columns
+
     def load(self):
-        # row_elements = [element for element in self._tree if
-        #                 element.tag.endswith('row')]
-        # self._rows = [self._rows.append(Row(self, row_elements[y], y)) for
-        #               y in range(0, len(row_elements) - 1)]
+        # loads rows and columns into sheet lists
+
+        # load rows
         row_elements = self._tree.findall(self.ns('table:table-row'))
         [self._rows.append(Row(self, y, row_elements[y])) for y in
          range(0, len(row_elements))]
         self._loaded = True
+
+        # load columns
+        column_elements = self._tree.findall(self.ns('table:table-column'))
+        x = 0
+        for column_tree in column_elements:
+            repeat = column_tree.get(self.ns(
+                    'table:number-columns-repeated'))
+            if repeat:
+                for x in range(0, int(repeat)):
+                    self._columns.append(Column(self, x, column_tree))
+                    x += 1
+            else:
+                self._columns.append(Column(self, x, column_tree))
+                x += 1
 
     def __getitem__(self, item):
         # if item is tuple or list, return the referenced cell
@@ -565,9 +580,16 @@ class Row:
 
 
 class Column:
-    pass  # not used yet, here because it exists in spreadsheet xml
-    # files and is used for formatting + possibly other uses. May be
-    # utilized in the future
+    # used by spreadsheet xml for storing formatting, also useful for
+    # references.
+    def __init__(self, sheet, x, tree):
+        self.x = x
+        self.sheet = sheet
+        self._tree = tree
+
+    def __getitem__(self, y):
+        # unlike row, does not store cells.
+        return self.sheet[(self.x, y)]
 
 
 class Library:
