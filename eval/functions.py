@@ -13,6 +13,7 @@ function_replace = {
     'if': 'functions.py_if',
     'sum': 'sum',  # I think this should work. if not.. add 'py_sum' fun
     'count': 'functions.py_count',
+    'counta': 'functions.py_counta',
 }
 
 
@@ -36,6 +37,26 @@ def py_count(args):
 
             def count(cell_ob):
                 if cell_ob.data_type == 'float' or cell_ob.data_type == 'int':
+                    return 1
+                else:
+                    return 0
+
+            if ref.__class__.__name__ == 'Cell':
+                count += count(ref)
+            else:
+                for cell in ref.cells:
+                    count += count(cell)
+    return count
+
+
+def py_counta(args):
+    count = 0
+    for arg in args:
+        if arg in global_file.formulas:
+            ref = global_file.formulas[arg]
+
+            def count(cell_ob):
+                if cell_ob.has_contents:
                     return 1
                 else:
                     return 0
