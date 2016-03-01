@@ -64,6 +64,7 @@ class Cell:
         # stores new values, without applying them to _cell_element
         self._new_attrib = {}
         self._new_text = None
+        self._change_flag = False  # not yet implemented
 
         # may be added in the future to speed up program
         # self._dependencies
@@ -423,15 +424,8 @@ class CellRange:
         for sheet in self.matrix:
             for row in sheet:
                 for cell in row:
-                    d.update(cell.find_dependencies())
+                    d.update(cell.dependencies)
         return d
-
-    def return_value(self):
-        # returns the combined sum of all cells in the range
-        return self.value
-
-    def find_dependencies(self):
-        return self.dependencies
 
     def evaluate(self):  # evaluates each cell in matrix
         [[[cell.evaluate() for cell in row]
