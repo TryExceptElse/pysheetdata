@@ -546,6 +546,29 @@ class Sheet:
                 return self._rows[y]
         return self._rows[y][x]
 
+    def find(self, column_or_row, name_to_find,
+             name_index=0, case_sensitive=False):
+        if column_or_row == 'row' or column_or_row == 'rows':
+            list_to_search = self._rows
+        elif column_or_row == 'column' or column_or_row == 'columns':
+            list_to_search = self._columns
+        else:
+            raise KeyError('list to search should be \'row\' or \'column\', '
+                           'not %s' % column_or_row)
+        if case_sensitive:
+            name_to_find = name_to_find.lower()
+        result = None
+        for row in list_to_search:
+            row_name = row[name_index].text
+            if case_sensitive:
+                row_name = row_name.lower()
+            if row_name == name_to_find:
+                if result is None:
+                    result = row
+                else:
+                    raise KeyError('multiple rows with name \'%s\'' %
+                                   name_to_find)
+
     def ns(self, string):
         return self.book.file.map.ns(string)
 
