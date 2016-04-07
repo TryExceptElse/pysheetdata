@@ -48,12 +48,22 @@ class SheetDataError(Exception):
     pass
 
 
-class Cell:
+class LibComponent:
+    def __init__(self):
+        self._settings = {}
+
+    @property
+    def inc_set(self):
+        return self._settings.get('inc_set', True)
+
+
+class Cell(LibComponent):
     # in some sheets there are going to be a LOT of these, should be
     # coded as such.
     # 78,000 plus in some sheets that I'll be using this for,
     # and I'm sure others will have far more
     def __init__(self, cell_data, position, sheet, mode='standard'):
+        super().__init__()
         self.mode = mode
         # changing mode allows different amounts of data to be stored
         # for each cell. speed vs memory usage
@@ -65,6 +75,7 @@ class Cell:
         self._new_attrib = {}
         self._new_text = None
         self._change_flag = False  # not yet implemented
+        # output vars
 
         # may be added in the future to speed up program
         # self._dependencies
@@ -219,6 +230,18 @@ class Cell:
     # if that proves to be the case, this will need to be updated.
     def dependencies(self):
         return self.find_dependencies()
+
+    #############################
+    # Output props
+    @property
+    def included(self):
+        # if all parent objects are set to be included in output,
+        # returns true as cell is to be included in output file
+        if all([self.book.inc_set,
+                self.sheet.inc_set,
+                self.row.inc_set,
+                self.column.inc_set]):
+            return True
 
     def get(self, string, cached=False):
         # get method called by property getters that use the attrib
@@ -433,7 +456,7 @@ class CellRange:
          for sheet in self.matrix]
 
 
-class Book:
+class Book(LibComponent):
     # gets passed relevant dictionary of elements by file.load()
     # should not load cells until that function is called
     # then pass on relevant sub-dictionary to sheets that are created
@@ -444,6 +467,7 @@ class Book:
         self.library = library
         self.sheets = {}
         self.sheet_list = []  # list of sheets, in order of file
+        self._settings = {}
 
     @property
     def file_name(self):
@@ -484,7 +508,7 @@ class Book:
         return self.file.map.ns(string)
 
 
-class Sheet:
+class Sheet(LibComponent):
     def __init__(self, book, element_tree):
         self._rows = []
         self._columns = []
@@ -496,6 +520,7 @@ class Sheet:
                      for attribute in self._attributes
                      if not attribute.endswith('style-name') and
                      attribute.endswith('name')][0]
+        self._settings = {}
 
     @property
     def columns(self):
@@ -573,13 +598,15 @@ class Sheet:
         return self.book.file.map.ns(string)
 
 
-class Row:
+class Row(LibComponent):
     def __init__(self, sheet, y, tree):
+        super().__init__()
         self.y = y
         self.sheet = sheet
         self._tree = tree
         self._cells = []
         self._loaded = False
+        self._settings = {}
 
     def __getitem__(self, item):
         if not self._loaded:
@@ -596,10 +623,11 @@ class Row:
         return self.sheet.book.file.map.ns(string)
 
 
-class Column:
+class Column(LibComponent):
     # used by spreadsheet xml for storing formatting, also useful for
     # references.
     def __init__(self, sheet, x, tree):
+        super().__init__()
         self.x = x
         self.sheet = sheet
         self._tree = tree
@@ -609,12 +637,14 @@ class Column:
         return self.sheet[(self.x, y)]
 
 
-class Library:
+class Library(LibComponent):
     def __init__(self, list_of_addresses, recursive_loading=False):
+        super().__init__()
         self.list = list_of_addresses
         self.files = {address: File(address, self) for address in self.list}
         self.books = {}
         self.recursive = recursive_loading
+        self._settings = {}
 
         [self.files[file].load() for file in self.files]
 
