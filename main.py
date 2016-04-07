@@ -56,6 +56,18 @@ class LibComponent:
     def inc_set(self):
         return self._settings.get('inc_set', True)
 
+    @property
+    def included(self):
+        if all([parent.inc_set for parent in self.parents])
+            return True
+
+    @property
+    def parents(self):
+        # returns list of parent row, column, sheet, book, lib
+        return [getattr(self, parent_s) for parent_s in
+                ['row', 'column', 'sheet', 'book', 'lib']
+                if getattr(self, parent_s) is not None]
+
 
 class Cell(LibComponent):
     # in some sheets there are going to be a LOT of these, should be
