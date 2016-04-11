@@ -49,8 +49,15 @@ class SheetDataError(Exception):
 
 
 class LibComponent:
+    """
+    abstract library component class, subclassed by cell, sheet, book, lib
+    
+    """
     def __init__(self):
         self._settings = {}
+        self._sheet = None
+        self._book = None
+        self._lib = None
 
     @property
     def inc_set(self):
@@ -58,7 +65,7 @@ class LibComponent:
 
     @property
     def included(self):
-        if all([parent.inc_set for parent in self.parents])
+        if all([parent.inc_set for parent in self.parents]):
             return True
 
     @property
@@ -67,6 +74,80 @@ class LibComponent:
         return [getattr(self, parent_s) for parent_s in
                 ['row', 'column', 'sheet', 'book', 'lib']
                 if getattr(self, parent_s) is not None]
+
+    #######################
+    # parent object getters
+    # iterates through hierarchy in order and attempts to find
+    # appropriate instance
+
+    @property
+    def name(self):
+        return self.__class__.__name__
+
+    @property
+    def row(self):
+        try:
+            return self.row
+        except AttributeError:
+            raise NotImplementedError('%s does not have a row parent obj')
+
+    @property
+    def column(self):
+        try:
+            return self.column
+        except AttributeError:
+            raise NotImplementedError('%s does not have a column parent obj')
+
+    @property
+    def sheet(self):
+        return self.get_parent('sheet')
+
+    @sheet.setter
+    def sheet(self, sheet):
+        self._sheet = sheet
+
+    @property
+    def book(self):
+        return self.get_parent('book')
+
+    @book.setter
+    def book(self, book):
+        self._book = book
+
+    @property
+    def lib(self):
+        return self.get_parent('lib')
+
+    @lib.setter
+    def lib(self, lib):
+        self._lib = lib
+
+    @property
+    def library(self):
+        # backwards compatibility, hurrah.
+        return self.get_parent('lib')
+
+    @property
+    def file(self):
+        return self.get_parent('lib').file
+
+    def get_parent(self, hierarchy_s, none_on_error=False):
+        # minor arg correction to remove ambiguity
+        hierarchy = ['sheet', 'book', 'lib']
+        current_hierarchy_obj = self
+        if hierarchy_s not in hierarchy:
+            raise KeyError('parent %s not in hierarchy' % hierarchy_s)
+        for entry in hierarchy:
+            new_hierarchy_ob = getattr(current_hierarchy_obj, entry)
+            if new_hierarchy_ob is not None:
+                current_hierarchy_obj = new_hierarchy_ob
+        if none_on_error:
+            return None
+        raise KeyError('could not find %s' % hierarchy_s)
+
+    def ns(self, string):
+        # returns namespace instance for lib comp
+        return self.file.map.ns(string)
 
 
 class Cell(LibComponent):
@@ -92,25 +173,6 @@ class Cell(LibComponent):
         # may be added in the future to speed up program
         # self._dependencies
         # self._dependants
-
-    @property
-    def library(self):
-        try:
-            return self.sheet.book.library
-        except AttributeError:
-            return None
-
-    @property
-    def file(self):
-        return self.sheet.book.file
-
-    @property
-    def book(self):
-        return self.sheet.book
-
-    @property
-    def map(self):
-        return self.file.map
 
     @property
     def has_contents(self):
@@ -468,60 +530,48 @@ class CellRange:
          for sheet in self.matrix]
 
 
-class Book(LibComponent):
-    # gets passed relevant dictionary of elements by file.load()
-    # should not load cells until that function is called
-    # then pass on relevant sub-dictionary to sheets that are created
-    # so on
-    def __init__(self, library, file, element_tree):
-        self.file = file
-        self._element_tree = element_tree
-        self.library = library
-        self.sheets = {}
-        self.sheet_list = []  # list of sheets, in order of file
+class Row(LibComponent):
+    def __init__(self, sheet, y, tree):
+        super().__init__()
+        self.y = y
+        self.sheet = sheet
+        self._tree = tree
+        self._cells = []
+        self._loaded = False
         self._settings = {}
 
-    @property
-    def file_name(self):
-        return self.file.file_id
-
     def __getitem__(self, item):
-        item = item.lower()
-        if item in self.sheets:
-            pass
-        elif item in self.sheet_list:
-            if self.library.recursive:
-                self.load(item)
-            else:
-                raise KeyError(str(item) + ' is in Book ' + self.file_name +
-                               ' but not loaded, and recursive loading is'
-                               ' not enabled')
-        else:
-            raise KeyError(str(item) + ' is not in Book ' + self.file_name)
-        return self.sheets[item]
+        if not self._loaded:
+            self.load()
+        return self._cells[item]
 
-    def load(self, sheet_to_load):
-        # load sheet of name (arg) or else load everything
-        # from xml module, response to simple 'if self._element_tree';
-        # "FutureWarning: The behavior of this method will change in
-        # future versions. Use specific 'len(elem)' or
-        # 'elem is not None' test instead."
-        if self._element_tree is not None:
-            [self.add_sheet(Sheet(self, sheet))
-             for sheet in self._element_tree.findall(self.ns('table:table'))
-             if (sheet.attrib[self.ns('table:name')] == sheet_to_load or
-                 sheet_to_load is None)]
-        # check
-
-    def add_sheet(self, sheet):
-        self.sheets[sheet.name.lower()] = sheet
+    def load(self):
+        cell_elements = self._tree.findall(self.ns('table:table-cell'))
+        [self._cells.append(Cell(cell_elements[x], (x, self.y), self.sheet))
+         for x in range(0, len(cell_elements))]
+        self._loaded = True
 
     def ns(self, string):
-        return self.file.map.ns(string)
+        return self.sheet.book.file.map.ns(string)
+
+
+class Column(LibComponent):
+    # used by spreadsheet xml for storing formatting, also useful for
+    # references.
+    def __init__(self, sheet, x, tree):
+        super().__init__()
+        self.x = x
+        self.sheet = sheet
+        self._tree = tree
+
+    def __getitem__(self, y):
+        # unlike row, does not store cells.
+        return self.sheet[(self.x, y)]
 
 
 class Sheet(LibComponent):
     def __init__(self, book, element_tree):
+        super().__init__()
         self._rows = []
         self._columns = []
         self._tree = element_tree
@@ -610,43 +660,57 @@ class Sheet(LibComponent):
         return self.book.file.map.ns(string)
 
 
-class Row(LibComponent):
-    def __init__(self, sheet, y, tree):
+class Book(LibComponent):
+    # gets passed relevant dictionary of elements by file.load()
+    # should not load cells until that function is called
+    # then pass on relevant sub-dictionary to sheets that are created
+    # so on
+    def __init__(self, library, file, element_tree):
         super().__init__()
-        self.y = y
-        self.sheet = sheet
-        self._tree = tree
-        self._cells = []
-        self._loaded = False
+        self.file = file
+        self._element_tree = element_tree
+        self.library = library
+        self.sheets = {}
+        self.sheet_list = []  # list of sheets, in order of file
         self._settings = {}
 
-    def __getitem__(self, item):
-        if not self._loaded:
-            self.load()
-        return self._cells[item]
+    @property
+    def file_name(self):
+        return self.file.file_id
 
-    def load(self):
-        cell_elements = self._tree.findall(self.ns('table:table-cell'))
-        [self._cells.append(Cell(cell_elements[x], (x, self.y), self.sheet))
-         for x in range(0, len(cell_elements))]
-        self._loaded = True
+    def __getitem__(self, item):
+        item = item.lower()
+        if item in self.sheets:
+            pass
+        elif item in self.sheet_list:
+            if self.library.recursive:
+                self.load(item)
+            else:
+                raise KeyError(str(item) + ' is in Book ' + self.file_name +
+                               ' but not loaded, and recursive loading is'
+                               ' not enabled')
+        else:
+            raise KeyError(str(item) + ' is not in Book ' + self.file_name)
+        return self.sheets[item]
+
+    def load(self, sheet_to_load):
+        # load sheet of name (arg) or else load everything
+        # from xml module, response to simple 'if self._element_tree';
+        # "FutureWarning: The behavior of this method will change in
+        # future versions. Use specific 'len(elem)' or
+        # 'elem is not None' test instead."
+        if self._element_tree is not None:
+            [self.add_sheet(Sheet(self, sheet))
+             for sheet in self._element_tree.findall(self.ns('table:table'))
+             if (sheet.attrib[self.ns('table:name')] == sheet_to_load or
+                 sheet_to_load is None)]
+        # check
+
+    def add_sheet(self, sheet):
+        self.sheets[sheet.name.lower()] = sheet
 
     def ns(self, string):
-        return self.sheet.book.file.map.ns(string)
-
-
-class Column(LibComponent):
-    # used by spreadsheet xml for storing formatting, also useful for
-    # references.
-    def __init__(self, sheet, x, tree):
-        super().__init__()
-        self.x = x
-        self.sheet = sheet
-        self._tree = tree
-
-    def __getitem__(self, y):
-        # unlike row, does not store cells.
-        return self.sheet[(self.x, y)]
+        return self.file.map.ns(string)
 
 
 class Library(LibComponent):
