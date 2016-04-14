@@ -88,7 +88,7 @@ class LibComponent:
     @property
     def row(self):
         try:
-            return self._row # only cells have this attr
+            return self._row  # only cells have this attr
         except AttributeError:
             raise NotImplementedError('%s does not have a row parent obj')
 
@@ -158,7 +158,6 @@ class Cell(LibComponent):
         self._cell_element = cell_data
         self._position = position
         self._cached_position = position
-        # self._sheet = sheet
         self._parent = sheet
         # stores new values, without applying them to _cell_element
         self._new_attrib = {}
@@ -362,10 +361,7 @@ class Cell(LibComponent):
             if self.script is not None:
                 start = None
                 script_s = self.script
-                # fixing text prop will fix the above error warning
-                # (if no warning, I forgot to remove this after fixing)
                 for x in range(0, len(script_s)):
-                    # try:
                         if script_s[x: x + 5] == 'cells[':
                             start = x
                         elif script_s[x] == ']' and \
@@ -374,9 +370,6 @@ class Cell(LibComponent):
                             start = None
                             dependencies['cells[' + reference + ']'] = \
                                 self.cell_from_reference(reference)
-                    # except:  # todo: find out what error happens
-                        # here and specify that.
-                        # pass
             return dependencies
 
     def cell_from_reference(self, reference):
@@ -527,7 +520,6 @@ class Row(LibComponent):
     def __init__(self, sheet, y, tree):
         super().__init__()
         self.y = y
-        # self._sheet = sheet
         self._parent = sheet
         self._tree = tree
         self._cells = []
@@ -552,7 +544,6 @@ class Column(LibComponent):
     def __init__(self, sheet, x, tree):
         super().__init__()
         self.x = x
-        # self._sheet = sheet
         self.parent = sheet
         self._tree = tree
 
@@ -569,7 +560,6 @@ class Sheet(LibComponent):
         self._tree = element_tree
         self._attributes = self._tree.attrib
         self._loaded = False
-        # self._book = book
         self._parent = book
         self.name = [self._attributes[attribute]
                      for attribute in self._attributes
@@ -659,7 +649,6 @@ class Book(LibComponent):
         super().__init__()
         self._file = file
         self._element_tree = element_tree
-        # self._library = library
         self._parent = library
         self.sheets = {}
         self.sheet_list = []  # list of sheets, in order of file
