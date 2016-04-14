@@ -54,6 +54,7 @@ class LibComponent:
     
     """
     def __init__(self):
+        self.parent = None
         self._settings = {}
         self._sheet = None
         self._book = None
@@ -81,69 +82,63 @@ class LibComponent:
     # appropriate instance
 
     @property
-    def name(self):
+    def class_name(self):
         return self.__class__.__name__
 
     @property
     def row(self):
         try:
-            return self.row
+            return self._row # only cells have this attr
         except AttributeError:
             raise NotImplementedError('%s does not have a row parent obj')
 
     @property
     def column(self):
         try:
-            return self.column
+            return self._column
         except AttributeError:
             raise NotImplementedError('%s does not have a column parent obj')
 
     @property
     def sheet(self):
-        return self.get_parent('sheet')
-
-    @sheet.setter
-    def sheet(self, sheet):
-        self._sheet = sheet
+        return self.get_parent('Sheet')
 
     @property
     def book(self):
-        return self.get_parent('book')
-
-    @book.setter
-    def book(self, book):
-        self._book = book
+        return self.get_parent('Book')
 
     @property
     def lib(self):
-        return self.get_parent('lib')
-
-    @lib.setter
-    def lib(self, lib):
-        self._lib = lib
+        return self.get_parent('Library')
 
     @property
     def library(self):
         # backwards compatibility, hurrah.
-        return self.get_parent('lib')
+        return self.get_parent('Library')
 
     @property
     def file(self):
-        return self.get_parent('lib').file
+        return self.get_parent('Book').file
 
-    def get_parent(self, hierarchy_s, none_on_error=False):
-        # minor arg correction to remove ambiguity
-        hierarchy = ['sheet', 'book', 'lib']
-        current_hierarchy_obj = self
-        if hierarchy_s not in hierarchy:
-            raise KeyError('parent %s not in hierarchy' % hierarchy_s)
-        for entry in hierarchy:
-            new_hierarchy_ob = getattr(current_hierarchy_obj, entry)
-            if new_hierarchy_ob is not None:
-                current_hierarchy_obj = new_hierarchy_ob
-        if none_on_error:
-            return None
-        raise KeyError('could not find %s' % hierarchy_s)
+    @file.setter
+    def file(self, file):
+        self.get_parent('Book').file = file
+
+    def get_parent(self, hierarchy_s=None):
+        # return parent in hierarchy of name 'hierarchy_s'
+        # if none, returns direct parent of inst.
+        parent_attr = getattr(self, '_parent', None)
+        if hierarchy_s is None:
+            hierarchy_s = 'parent'
+        if parent_attr is None:
+            raise NotImplementedError(self.class_name + ' does not have a ' +
+                                      hierarchy_s)
+        if hierarchy_s is None:
+            return self.parent
+        if self.class_name == hierarchy_s:
+            return self
+        else:
+            return parent_attr.get_parent(hierarchy_s)
 
     def ns(self, string):
         # returns namespace instance for lib comp
@@ -163,7 +158,8 @@ class Cell(LibComponent):
         self._cell_element = cell_data
         self._position = position
         self._cached_position = position
-        self.sheet = sheet
+        # self._sheet = sheet
+        self._parent = sheet
         # stores new values, without applying them to _cell_element
         self._new_attrib = {}
         self._new_text = None
@@ -462,9 +458,6 @@ class Cell(LibComponent):
         else:
             return ''
 
-    def ns(self, string):
-        return self.map.ns(string)
-
 
 class CellRange:
     # range of cells intended for evaluator - acts similar to cell
@@ -534,7 +527,8 @@ class Row(LibComponent):
     def __init__(self, sheet, y, tree):
         super().__init__()
         self.y = y
-        self.sheet = sheet
+        # self._sheet = sheet
+        self._parent = sheet
         self._tree = tree
         self._cells = []
         self._loaded = False
@@ -551,9 +545,6 @@ class Row(LibComponent):
          for x in range(0, len(cell_elements))]
         self._loaded = True
 
-    def ns(self, string):
-        return self.sheet.book.file.map.ns(string)
-
 
 class Column(LibComponent):
     # used by spreadsheet xml for storing formatting, also useful for
@@ -561,7 +552,8 @@ class Column(LibComponent):
     def __init__(self, sheet, x, tree):
         super().__init__()
         self.x = x
-        self.sheet = sheet
+        # self._sheet = sheet
+        self.parent = sheet
         self._tree = tree
 
     def __getitem__(self, y):
@@ -577,7 +569,8 @@ class Sheet(LibComponent):
         self._tree = element_tree
         self._attributes = self._tree.attrib
         self._loaded = False
-        self.book = book
+        # self._book = book
+        self._parent = book
         self.name = [self._attributes[attribute]
                      for attribute in self._attributes
                      if not attribute.endswith('style-name') and
@@ -656,9 +649,6 @@ class Sheet(LibComponent):
                     raise KeyError('multiple rows with name \'%s\'' %
                                    name_to_find)
 
-    def ns(self, string):
-        return self.book.file.map.ns(string)
-
 
 class Book(LibComponent):
     # gets passed relevant dictionary of elements by file.load()
@@ -667,9 +657,10 @@ class Book(LibComponent):
     # so on
     def __init__(self, library, file, element_tree):
         super().__init__()
-        self.file = file
+        self._file = file
         self._element_tree = element_tree
-        self.library = library
+        # self._library = library
+        self._parent = library
         self.sheets = {}
         self.sheet_list = []  # list of sheets, in order of file
         self._settings = {}
@@ -677,6 +668,14 @@ class Book(LibComponent):
     @property
     def file_name(self):
         return self.file.file_id
+
+    @property
+    def file(self):
+        return self._file
+
+    @file.setter
+    def file(self, file):
+        self._file = file
 
     def __getitem__(self, item):
         item = item.lower()
@@ -708,9 +707,6 @@ class Book(LibComponent):
 
     def add_sheet(self, sheet):
         self.sheets[sheet.name.lower()] = sheet
-
-    def ns(self, string):
-        return self.file.map.ns(string)
 
 
 class Library(LibComponent):
@@ -809,8 +805,8 @@ class File:
 
             self.library.books[self.file_id].load(sheet_name)
 
-    def ns(self, string):
-        return self.map.ns(string)
+    def ns(self, s):
+        return self.map.ns(s)
 
 
 class NSMap:
