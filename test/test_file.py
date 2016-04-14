@@ -12,8 +12,3 @@ class TestFile(TestCase):
         self.test_file = main.File(test_address)
 
         self.test_file.load()
-
-
-
-
-

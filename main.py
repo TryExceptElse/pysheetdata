@@ -387,10 +387,8 @@ class Cell(LibComponent):
                 range_end = reference[index + 1:]
         if reference_type == 'cell':
             reference_parts = break_apart_reference(reference)
-            reference_parts = self.complete_reference_parts(reference_parts)
-            return self.sheet.book.library[reference_parts[0]][
-                                           reference_parts[1]][
-                                           reference_parts[2]]
+            reference_parts = self.complete_reference_parts(*reference_parts)
+            return self.sheet.book.library[reference_parts]
         elif reference_type == 'range':
             start_parts = break_apart_reference(range_start)
             start_parts = self.complete_reference_parts(
@@ -399,21 +397,17 @@ class Cell(LibComponent):
             end_parts = self.complete_reference_parts(
                     end_parts)
             return CellRange(
-                self.sheet.book.library[start_parts[0]]
-                                       [start_parts[1]]
-                                       [start_parts[2]],
-                self.sheet.book.library[end_parts[0]]
-                                       [end_parts[1]]
-                                       [end_parts[2]]
+                self.sheet.book.library[start_parts],
+                self.sheet.book.library[end_parts]
             )
 
-    def complete_reference_parts(self, parts):
+    def complete_reference_parts(self, *parts):
         sheet_default = self.sheet.name
         book_default = self.sheet.book.file_name
         length = len(parts)
         if 0 < length <= 3:
             additions = [book_default, sheet_default]
-            return additions[0: 3 - length] + parts
+            return additions[0: 3 - length] + list(parts)
         else:
             raise SheetDataError('reference parts outside 1-3 range')
 
@@ -719,7 +713,11 @@ class Library(LibComponent):
 
     def __getitem__(self, item):
         # the new improved method for returning cells / books / sheets
-        # should supplant return_cell method
+        # if item is list, break apart and recall self
+        # (allows passing of lists of getters)
+        item_type = item.__class__.__name__
+        if item_type == 'list' or item_type == 'tuple':
+            return self[item[0]][item[1]][item[2]]
         if item in self.books:
             book = self.books[item]
         elif '/' not in item and \
