@@ -12,6 +12,5 @@ Included / to be included:
 
 """
 
-value = None
-formula = None
-text = None
+cell = None
+cells = None

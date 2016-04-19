@@ -23,11 +23,6 @@ given a ods file -
                         (use brackets to find reference)  - (so much easier)
                     get xy ref
                     get a1 ref
-
-                    each cell needs (verbatim):
-
-                    return_value()
-                    return_raw_formula
     return library or file
 
 scripting variables:
@@ -41,7 +36,7 @@ import lxml.etree as etree
 
 import eval.storage as storage
 import eval.parser as parser
-import script.script as script
+import script
 
 
 class SheetDataError(Exception):
@@ -51,7 +46,6 @@ class SheetDataError(Exception):
 class LibComponent:
     """
     abstract library component class, subclassed by cell, sheet, book, lib
-    
     """
     def __init__(self):
         self.parent = None
@@ -409,7 +403,7 @@ class Cell(LibComponent):
             additions = [book_default, sheet_default]
             return additions[0: 3 - length] + list(parts)
         else:
-            raise SheetDataError('reference parts outside 1-3 range')
+            raise SheetDataError('len of reference parts outside 1-3 range')
 
     def evaluate(self, recursive=True, scripts=True):
         if self.has_contents:
@@ -432,15 +426,15 @@ class Cell(LibComponent):
                         print('could not set new value')
                         pass
 
-    def run_script(self, dependencies):
+    def run_script(self, dependencies, auto_import=True):
         # dependencies is list of cells that are used
         if self.has_contents and self.is_script:
             # set script vars that can be called by the script
-            script.value = None
-            script.formula = None
-            script.text = self.text
+            script.cell = self
             script.cells = dependencies
             script_string = self.script
+            if auto_import:
+                script_string = 'from script import *\n' + script_string
             exec(script_string)
         else:
             return ''
