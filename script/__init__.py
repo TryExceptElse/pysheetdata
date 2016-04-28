@@ -12,5 +12,17 @@ Included / to be included:
 
 """
 
+
+class _CellReferencer:
+    """
+    returns cells from references in script
+    """
+
+    def __init__(self, lookup_f):
+        self.lookup_f = lookup_f
+
+    def __getitem__(self, item):
+        return self.lookup_f(item)
+
 cell = None
 cells = None

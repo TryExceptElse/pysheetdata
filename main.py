@@ -33,6 +33,7 @@ scripting variables:
 
 import zipfile
 import lxml.etree as etree
+import os.path as path
 
 import eval.storage as storage
 import eval.parser as parser
@@ -53,6 +54,17 @@ class LibComponent:
         self._sheet = None
         self._book = None
         self._lib = None
+
+    def __str__(self):
+        return '%s %s' % (self.class_name, self.identifier)
+
+    @property
+    def identifier(self):
+        raise NotImplementedError('LibComponent should only be inherited from')
+
+    @property
+    def class_name(self):
+        return self.__class__.__name__
 
     @property
     def inc_set(self):
@@ -76,22 +88,20 @@ class LibComponent:
     # appropriate instance
 
     @property
-    def class_name(self):
-        return self.__class__.__name__
-
-    @property
     def row(self):
         try:
             return self._row  # only cells have this attr
         except AttributeError:
-            raise NotImplementedError('%s does not have a row parent obj')
+            raise NotImplementedError('%s does not have a row parent obj'
+                                      % self)
 
     @property
     def column(self):
         try:
-            return self._column
+            return self._column  # see above
         except AttributeError:
-            raise NotImplementedError('%s does not have a column parent obj')
+            raise NotImplementedError('%s does not have a column parent obj'
+                                      % self)
 
     @property
     def sheet(self):
@@ -121,6 +131,8 @@ class LibComponent:
     def get_parent(self, hierarchy_s=None):
         # return parent in hierarchy of name 'hierarchy_s'
         # if none, returns direct parent of inst.
+        if self.class_name == hierarchy_s:
+            return self
         parent_attr = getattr(self, '_parent', None)
         if hierarchy_s is None:
             hierarchy_s = 'parent'
@@ -129,8 +141,6 @@ class LibComponent:
                                       hierarchy_s)
         if hierarchy_s is None:
             return self.parent
-        if self.class_name == hierarchy_s:
-            return self
         else:
             return parent_attr.get_parent(hierarchy_s)
 
@@ -162,6 +172,10 @@ class Cell(LibComponent):
         # may be added in the future to speed up program
         # self._dependencies
         # self._dependants
+
+    @property
+    def identifier(self):
+        return self.a1
 
     @property
     def has_contents(self):
@@ -356,14 +370,14 @@ class Cell(LibComponent):
                 start = None
                 script_s = self.script
                 for x in range(0, len(script_s)):
-                        if script_s[x: x + 5] == 'cells[':
-                            start = x
-                        elif script_s[x] == ']' and \
-                                start is not None:
-                            reference = script_s[start + 6:x - 1]
-                            start = None
-                            dependencies['cells[' + reference + ']'] = \
-                                self.cell_from_reference(reference)
+                    if script_s[x: x + 5] == 'cells[':
+                        start = x
+                    elif script_s[x] == ']' and \
+                            start is not None:
+                        reference = script_s[start + 6:x - 1]
+                        start = None
+                        dependencies['cells[' + reference + ']'] = \
+                            self.cell_from_reference(reference)
             return dependencies
 
     def cell_from_reference(self, reference):
@@ -468,6 +482,18 @@ class CellRange:
                     row_matrix.append(cell)
 
     @property
+    def identifier(self):
+        return '%s %s' % (self.start_cell.a1, self.end_cell.a1)
+
+    @property
+    def start_cell(self):
+        return self.matrix[1][1][1]
+
+    @property
+    def end_cell(self):
+        return self.matrix[-1][-1][-1]
+
+    @property
     def matrix(self):
         return self._matrix
 
@@ -519,6 +545,10 @@ class Row(LibComponent):
             self.load()
         return self._cells[item]
 
+    @property
+    def identifier(self):
+        return self.y
+
     def load(self):
         cell_elements = self._tree.findall(self.ns('table:table-cell'))
         [self._cells.append(Cell(cell_elements[x], (x, self.y), self.sheet))
@@ -539,6 +569,10 @@ class Column(LibComponent):
         # unlike row, does not store cells.
         return self.sheet[(self.x, y)]
 
+    @property
+    def identifier(self):
+        return x_to_letter(self.x)
+
 
 class Sheet(LibComponent):
     def __init__(self, book, element_tree):
@@ -554,6 +588,10 @@ class Sheet(LibComponent):
                      if not attribute.endswith('style-name') and
                      attribute.endswith('name')][0]
         self._settings = {}
+
+    @property
+    def identifier(self):
+        return self.name
 
     @property
     def columns(self):
@@ -643,6 +681,10 @@ class Book(LibComponent):
         self._settings = {}
 
     @property
+    def identifier(self):
+        return path.split(self._file.file_id)[-1]
+
+    @property
     def file_name(self):
         return self.file.file_id
 
@@ -655,7 +697,7 @@ class Book(LibComponent):
         self._file = file
 
     def __getitem__(self, item):
-        item = item.lower()
+        item = strip_quotes(item.lower())
         if item in self.sheets:
             pass
         elif item in self.sheet_list:
@@ -696,6 +738,10 @@ class Library(LibComponent):
         self._settings = {}
 
         [self.files[file].load() for file in self.files]
+
+    @property
+    def identifier(self):
+        return 'base'
 
     def load_books(self):
         for book_name in self.list:
@@ -853,7 +899,7 @@ def x_to_letter(x):
 
     l.append(x % 26)
 
-    # since the above worked from right
+    # since the above worked from the right
     # (smallest to largest place digit)
     # this reverses the order
     l = l[::-1]
@@ -938,3 +984,16 @@ def find_unquoted(target, string, back=False, list_mode=False):
         return index
 
 PYSCRIPT_FLAG = 'py='  # flag denoting start of python script
+
+
+def strip_quotes(string):
+    if is_quote(string[0]) and is_quote(string[-1]):
+        string = string[1:-1]
+    return string
+
+
+def is_quote(char):
+        if char == '\'' or char == '\"':
+            return True
+        else:
+            return False

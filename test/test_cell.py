@@ -1,5 +1,4 @@
 """
-This should grow to be by far the largest test file -
 should test most of the methods of the cell class
 """
 
@@ -33,16 +32,14 @@ class TestCell(TestCase):
     def test_dependencies_returns_cell_dependencies_from_formula_content(self):
         test_address = os.path.abspath('testdata/test1.ods')
         test_library = main.Library([test_address], True)
-        self.assertEqual('a1',
-                         test_library[test_address]['sheet1']['e2'].
-                         dependencies[0].a1)
+        self.assertIn("['('.A1]",
+                      test_library[test_address]['sheet1']['e2'].dependencies)
 
     def test_dependencies_returns_cell_dependencies_from_script_content(self):
         test_address = os.path.abspath('testdata/test1.ods')
         test_library = main.Library([test_address], True)
-        self.assertEqual('a1',
-                         test_library[test_address]['sheet1']['h2'].
-                         dependencies[0].a1)
+        self.assertIn("['('.A1]",
+                      test_library[test_address]['sheet1']['h2'].dependencies)
 
     def test_pyscript_cell_returns_correct_referenced_value(self):
         test_address = os.path.abspath('testdata/test1.ods')
