@@ -218,6 +218,10 @@ class Cell(LibComponent):
 
     @value.setter
     def value(self, value):
+        # note: this only returns a numerical value, following
+        # spreadsheet xml convention, whether this actually makes sense
+        # or not. use 'contents' property to get the cell contents,
+        # whether float or string
         self.set('office:value', value)
 
     @property
@@ -370,11 +374,11 @@ class Cell(LibComponent):
                 start = None
                 script_s = self.script
                 for x in range(0, len(script_s)):
-                    if script_s[x: x + 5] == 'cells[':
+                    if script_s[x: x + 6] == 'cells[':
                         start = x
                     elif script_s[x] == ']' and \
                             start is not None:
-                        reference = script_s[start + 6:x - 1]
+                        reference = script_s[start + 7:x - 1]
                         start = None
                         dependencies['cells[' + reference + ']'] = \
                             self.cell_from_reference(reference)
@@ -396,7 +400,7 @@ class Cell(LibComponent):
         if reference_type == 'cell':
             reference_parts = break_apart_reference(reference)
             reference_parts = self.complete_reference_parts(*reference_parts)
-            return self.sheet.book.library[reference_parts]
+            return self.library[reference_parts]
         elif reference_type == 'range':
             start_parts = break_apart_reference(range_start)
             start_parts = self.complete_reference_parts(
@@ -410,11 +414,14 @@ class Cell(LibComponent):
             )
 
     def complete_reference_parts(self, *parts):
+        # unfilled parts of reference are completed with
+        # self sheet and book
         sheet_default = self.sheet.name
         book_default = self.sheet.book.file_name
         length = len(parts)
-        if 0 < length <= 3:
+        if 0 < length <= 3:  # if length is within possible ref. depths
             additions = [book_default, sheet_default]
+            # add parts of reference that are missing from reference
             return additions[0: 3 - length] + list(parts)
         else:
             raise SheetDataError('len of reference parts outside 1-3 range')
@@ -425,7 +432,7 @@ class Cell(LibComponent):
                 for cell in self.dependencies:
                     self.dependencies[cell].evaluate()
             if scripts and self.script:
-                self.run_script(self.dependencies)
+                self.run_script()
             elif self.raw_formula:
                 evaluation = parser.evaluate(self.formula,
                                              self.dependencies)
@@ -440,15 +447,22 @@ class Cell(LibComponent):
                         print('could not set new value')
                         pass
 
-    def run_script(self, dependencies, auto_import=True):
+    def run_script(self, auto_import=True):
         # dependencies is list of cells that are used
+
+        class CellReferencer:
+            def __init__(self, lookup_formula):
+                self.lookup = lookup_formula
+
+            def __getitem__(self, reference_string):
+                return self.lookup(reference_string)
+
         if self.has_contents and self.is_script:
             # set script vars that can be called by the script
             script.cell = self
-            script.cells = dependencies
-            script_string = self.script
+            script.cells = CellReferencer(self.cell_from_reference)
             if auto_import:
-                script_string = 'from script import *\n' + script_string
+                script_string = 'from script import *\n' + self.script
             exec(script_string)
         else:
             return ''
@@ -987,13 +1001,12 @@ PYSCRIPT_FLAG = 'py='  # flag denoting start of python script
 
 
 def strip_quotes(string):
+    def is_quote(char):
+            if char == '\'' or char == '\"':
+                return True
+            else:
+                return False
+
     if is_quote(string[0]) and is_quote(string[-1]):
         string = string[1:-1]
     return string
-
-
-def is_quote(char):
-        if char == '\'' or char == '\"':
-            return True
-        else:
-            return False
