@@ -461,6 +461,7 @@ class Cell(LibComponent):
             # set script vars that can be called by the script
             script.cell = self
             script.cells = CellReferencer(self.cell_from_reference)
+            script_string = self.script
             if auto_import:
                 script_string = 'from script import *\n' + self.script
             exec(script_string)

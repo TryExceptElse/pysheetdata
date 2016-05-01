@@ -38,7 +38,7 @@ class TestCell(TestCase):
     def test_dependencies_returns_cell_dependencies_from_script_content(self):
         test_address = os.path.abspath('testdata/test1.ods')
         test_library = main.Library([test_address], True)
-        self.assertIn("cells[A1]",
+        self.assertIn("cells[a1]",
                       test_library[test_address]['sheet1']['h2'].dependencies)
 
     def test_pyscript_cell_returns_correct_referenced_value(self):
