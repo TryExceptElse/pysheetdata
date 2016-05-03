@@ -166,6 +166,7 @@ class Cell(LibComponent):
         # stores new values, without applying them to _cell_element
         self._new_attrib = {}
         self._new_text = None
+        self._new_script = None
         self._change_flag = False  # not yet implemented
         # output vars
 
@@ -195,7 +196,8 @@ class Cell(LibComponent):
 
     @property
     def content(self):
-        if self.data_type == 'string' and not self.script:
+        if self.data_type == 'string':
+            self.evaluate()
             return self.text
         else:
             return self.value
@@ -214,7 +216,7 @@ class Cell(LibComponent):
         # instituted, will only reevaluate if a cell in the tree has
         # changed
         self.evaluate()
-        return self.get('office:value')
+        return float(self.get('office:value'))
 
     @value.setter
     def value(self, value):
@@ -222,12 +224,13 @@ class Cell(LibComponent):
         # spreadsheet xml convention, whether this actually makes sense
         # or not. use 'contents' property to get the cell contents,
         # whether float or string
-        self.set('office:value', value)
+        self.set('office:value', float(value))
+        self.data_type = 'float'
 
     @property
     def cached_value(self):
         # always returns original value from the xml file
-        return self.get('office:value', True)
+        return float(self.get('office:value', True))
 
     @property
     def text(self):
@@ -240,12 +243,14 @@ class Cell(LibComponent):
     @text.setter
     def text(self, string):
         # not using self.set because text is stored separately
+        # (ask whoever started that standard, no idea why)
+        self.data_type = 'string'
         if string != self.text:
             self._new_text = string
 
     @property
     def cached_text(self):
-        return self._cell_element[0].text
+        return self._cell_element[0].text  # get text directly from ET
 
     @property
     # this is the formula as modified to appear as it does as typed
@@ -268,12 +273,17 @@ class Cell(LibComponent):
 
     @property
     def script(self):
+        # if a new script has been set, use that
+        # otherwise, use the cached text to see if self is script.
+        # scripts themselves can change self text value.
+        if self._new_script:
+            return self._new_script
         if self.is_script:
             return self.text[len(PYSCRIPT_FLAG):]
 
     @script.setter
     def script(self, script_string):
-        self.text = PYSCRIPT_FLAG + script_string
+        self._new_script = script_string
 
     @property
     def a1(self):
@@ -340,9 +350,9 @@ class Cell(LibComponent):
         # if new val is different from original, put in new_attrib
         # dict, rather than editing loaded element tree. This allows
         # changes to be reverted
-        key = self.ns(key)
         if entry != self.get(key):
-            self._new_attrib[key] = entry
+            ns_key = self.ns(key)
+            self._new_attrib[ns_key] = entry
 
     def find_dependencies(self):
         # returns dictionary of referenced cells with reference as key
@@ -773,6 +783,7 @@ class Library(LibComponent):
         item_type = item.__class__.__name__
         if item_type == 'list' or item_type == 'tuple':
             return self[item[0]][item[1]][item[2]]
+        item = remove_file_prefix(strip_quotes(item))
         if item in self.books:
             book = self.books[item]
         elif '/' not in item and \
@@ -1010,4 +1021,11 @@ def strip_quotes(string):
 
     if is_quote(string[0]) and is_quote(string[-1]):
         string = string[1:-1]
+    return string
+
+
+def remove_file_prefix(string):
+    pre = 'file://'
+    if string.startswith(pre):
+        string = string[len(pre):]
     return string

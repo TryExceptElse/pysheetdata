@@ -41,6 +41,62 @@ class TestCell(TestCase):
         self.assertIn("cells[a1]",
                       test_library[test_address]['sheet1']['h2'].dependencies)
 
+    def test_cell_can_store_and_return_values(self):
+        test_address = os.path.abspath('testdata/test1.ods')
+        test_library = main.Library([test_address], True)
+        testing_cell = test_library[test_address]['sheet1']['h2']
+        testing_cell.value = 1
+        self.assertEqual(1, testing_cell.value)
+
+    def test_cached_value_returns_xml_value_despite_new_value_stored(self):
+        test_address = os.path.abspath('testdata/test1.ods')
+        test_library = main.Library([test_address], True)
+        testing_cell = test_library[test_address]['sheet1']['i2']
+        testing_cell.value = 2468.
+        self.assertEqual(1234, testing_cell.cached_value)
+
+    def test_cell_can_store_and_return_text(self):
+        test_address = os.path.abspath('testdata/test1.ods')
+        test_library = main.Library([test_address], True)
+        testing_cell = test_library[test_address]['sheet1']['h2']
+        testing_cell.text = 'a string'
+        self.assertEqual('a string', testing_cell.text)
+
+    def test_cached_text_returns_xml_text_despite_new_text_stored(self):
+        test_address = os.path.abspath('testdata/test1.ods')
+        test_library = main.Library([test_address], True)
+        testing_cell = test_library[test_address]['sheet1']['i1']
+        testing_cell.text = 'new string'
+        self.assertEqual('test cell', testing_cell.cached_text)
+
+    def test_cell_can_set_and_return_content_property_string(self):
+        test_address = os.path.abspath('testdata/test1.ods')
+        test_library = main.Library([test_address], True)
+        testing_cell = test_library[test_address]['sheet1']['h2']
+        testing_cell.content = 'content string'
+        self.assertEqual('content string', testing_cell.content)
+
+    def test_cell_can_set_and_return_content_property_float(self):
+        test_address = os.path.abspath('testdata/test1.ods')
+        test_library = main.Library([test_address], True)
+        testing_cell = test_library[test_address]['sheet1']['h2']
+        testing_cell.content = 4.4
+        self.assertEqual(4.4, testing_cell.content)
+
+    def test_setting_string_content_sets_text_property(self):
+        test_address = os.path.abspath('testdata/test1.ods')
+        test_library = main.Library([test_address], True)
+        testing_cell = test_library[test_address]['sheet1']['h2']
+        testing_cell.content = 'content string'
+        self.assertEqual('content string', testing_cell.text)
+
+    def test_setting_float_content_sets_value_property(self):
+        test_address = os.path.abspath('testdata/test1.ods')
+        test_library = main.Library([test_address], True)
+        testing_cell = test_library[test_address]['sheet1']['h2']
+        testing_cell.content = 1234
+        self.assertEqual(1234, testing_cell.value)
+
     def test_pyscript_cell_returns_correct_referenced_value(self):
         test_address = os.path.abspath('testdata/test1.ods')
         test_library = main.Library([test_address], True)
