@@ -196,6 +196,8 @@ class Cell(LibComponent):
 
     @property
     def content(self):
+        # will be refactored as 'value' to return either string
+        # or float value
         if self.data_type == 'string':
             self.evaluate()
             return self.text
@@ -220,10 +222,8 @@ class Cell(LibComponent):
 
     @value.setter
     def value(self, value):
-        # note: this only returns a numerical value, following
-        # spreadsheet xml convention, whether this actually makes sense
-        # or not. use 'contents' property to get the cell contents,
-        # whether float or string
+        # note: this only returns a numerical value only
+        # this will be refactored soon to return either str or float
         self.set('office:value', float(value))
         self.data_type = 'float'
 
@@ -676,12 +676,12 @@ class Sheet(LibComponent):
         else:
             raise KeyError('list to search should be \'row\' or \'column\', '
                            'not %s' % column_or_row)
-        if case_sensitive:
+        if not case_sensitive:
             name_to_find = name_to_find.lower()
         result = None
         for row in list_to_search:
             row_name = row[name_index].text
-            if case_sensitive:
+            if not case_sensitive:
                 row_name = row_name.lower()
             if row_name == name_to_find:
                 if result is None:
