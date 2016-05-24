@@ -46,7 +46,7 @@ class SheetDataError(Exception):
 
 class LibComponent:
     """
-    abstract library component class, subclassed by cell, sheet, book, lib
+    abstract library component class, sub-classed by cell, sheet, book, lib
     """
     def __init__(self):
         self.parent = None
@@ -574,6 +574,10 @@ class Row(LibComponent):
     def identifier(self):
         return self.y
 
+    @property
+    def list(self):
+        return [cell.content for cell in self._cells]
+
     def load(self):
         cell_elements = self._tree.findall(self.ns('table:table-cell'))
         [self._cells.append(Cell(cell_elements[x], (x, self.y), self.sheet))
@@ -614,6 +618,27 @@ class Sheet(LibComponent):
                      attribute.endswith('name')][0]
         self._settings = {}
 
+    def __getitem__(self, item):
+        # if item is tuple or list, return the referenced cell
+        # if item is string, convert it from a1 and return the cell
+        # if item is int, return the referenced row
+        # if self is not yet loaded, do that now
+        if not self._loaded:
+            self.load()
+        if isinstance(item, (list, tuple)):
+            x, y = item
+        elif isinstance(item, str):
+            x, y = xy_from_a1(item)
+        else:
+            try:
+                y = item
+            except:
+                raise KeyError(str(item) + ' is not a valid key for sheet ' +
+                               self.name)
+            else:
+                return self._rows[y]
+        return self._rows[y][x]
+
     @property
     def identifier(self):
         return self.name
@@ -621,6 +646,14 @@ class Sheet(LibComponent):
     @property
     def columns(self):
         return self._columns
+
+    @property
+    def matrix(self):
+        """
+        returns a matrix of sheet data
+        :return: matrix
+        """
+        return [row.list for row in self._rows]
 
     def load(self):
         # loads rows and columns into sheet lists
@@ -644,28 +677,6 @@ class Sheet(LibComponent):
             else:
                 self._columns.append(Column(self, x, column_tree))
                 x += 1
-
-    def __getitem__(self, item):
-        # if item is tuple or list, return the referenced cell
-        # if item is string, convert it from a1 and return the cell
-        # if item is int, return the referenced row
-        name = item.__class__.__name__
-        # if self is not yet loaded, do that now
-        if not self._loaded:
-            self.load()
-        if name == 'tuple' or name == 'list':
-            x, y = item
-        elif name == 'str':
-            x, y = xy_from_a1(item)
-        else:
-            try:
-                y = item
-            except:
-                raise KeyError(str(item) + ' is not a valid key for sheet ' +
-                               self.name)
-            else:
-                return self._rows[y]
-        return self._rows[y][x]
 
     def find(self, column_or_row, name_to_find,
              name_index=0, case_sensitive=False):
@@ -701,9 +712,9 @@ class Book(LibComponent):
         self._file = file
         self._element_tree = element_tree
         self._parent = library
+        self._settings = {}
         self.sheets = {}
         self.sheet_list = []  # list of sheets, in order of file
-        self._settings = {}
 
     @property
     def identifier(self):
@@ -720,6 +731,14 @@ class Book(LibComponent):
     @file.setter
     def file(self, file):
         self._file = file
+
+    @property
+    def dictionary(self):
+        """
+        creates and returns dictionary of book content
+        :return: content dictionary
+        """
+        return {sheet.name: sheet.matrix for sheet in self.sheets}
 
     def __getitem__(self, item):
         item = strip_quotes(item.lower())
@@ -748,6 +767,13 @@ class Book(LibComponent):
              if (sheet.attrib[self.ns('table:name')] == sheet_to_load or
                  sheet_to_load is None)]
         # check
+
+    def write(self, name, overwrite):
+        """
+        writes content dictionary to a file of name
+        :param name: name to write as.
+        :param overwrite: Bool, write over existing file of name
+        """
 
     def add_sheet(self, sheet):
         self.sheets[sheet.name.lower()] = sheet
@@ -780,8 +806,7 @@ class Library(LibComponent):
         # the new improved method for returning cells / books / sheets
         # if item is list, break apart and recall self
         # (allows passing of lists of getters)
-        item_type = item.__class__.__name__
-        if item_type == 'list' or item_type == 'tuple':
+        if isinstance(item, (list, tuple)):
             return self[item[0]][item[1]][item[2]]
         item = remove_file_prefix(strip_quotes(item))
         if item in self.books:
