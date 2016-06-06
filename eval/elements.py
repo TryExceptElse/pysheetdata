@@ -2,9 +2,11 @@
 Handles elements making up an excel formula.
 """
 
-from operator import add, sub, mul, truediv
+from operator import add, sub, mul, truediv, lt, le, eq, ne, ge, gt
 
 from math import pow
+
+import eval.errors as err
 
 
 class FormulaError(Exception):
@@ -29,8 +31,27 @@ class Element:
         """
         return str(self.string)
 
-    def __add__(self, other):
-        pass
+    def __add__(self, other): operate(self, other, '+')
+
+    def __sub__(self, other): operate(self, other, '-')
+
+    def __mul__(self, other): operate(self, other, '*')
+
+    def __truediv__(self, other): operate(self, other, '/')
+
+    def __pow__(self, power): operate(self, power, '^')
+
+    def __lt__(self, other): operate(self, other, '<')
+
+    def __le__(self, other): operate(self, other, '<=')
+
+    def __eq__(self, other): operate(self, other, '=')
+
+    def __ne__(self, other): operate(self, other, '<>')
+
+    def __ge__(self, other): operate(self, other, '>=')
+
+    def __gt__(self, other): operate(self, other, '>')
 
     @property
     def operator(self):
@@ -38,6 +59,21 @@ class Element:
             "operator string %s not in operators: %s" % \
             (self.operator_string, ", ".join(OPERATORS.values()))
         return OPERATORS[self.operator_string]
+
+    @property
+    def value(self):
+
+
+class Combined(Element):
+    """Elements combined via operations (add, subtract, etc, including
+    comparators)"""
+    def __init__(self, value, operator=None):
+        super().__init__(None, operator)
+        self._value = value
+
+    @property
+    def value(self):
+        return self._value
 
 
 class Bracket(Element):
@@ -134,7 +170,9 @@ def _get_elements_of_string(formula_string):
             if operator_string is not None:
                 raise FormulaError('Double operators present in'
                                    'formula: %s' % formula_string)
-            operator_string = char
+            operator_string = get_operator_string(formula_string, i)
+            if len(operator_string) == 2:
+                i += 1
         elif char == '[':
             end_i = _find_paired_closing_bracket(formula_string, i)
             elements.append(Reference(formula_string[i + 1:end_i],
@@ -314,17 +352,52 @@ def _separate_by_commas(args_string):
     return tuple(args)
 
 
+def get_operator_string(string, start_index):
+    """
+    Returns operator string given the containing string and index of
+    first character
+    :param string: Containing string
+    :param start_index: int index of first character of operator
+    :return: operator string, either one or two characters long.
+    """
+    first_char = string[start_index]
+    assert first_char in OPERATORS, '%s is not in operators' \
+                                    "dictionary ('%s')" % \
+                                    (string[start_index],
+                                     "', '".join(OPERATORS.keys()))
+    if first_char not in '<>':
+        return first_char
+    second_char = string[start_index + 1]
+    if second_char in '<=>':
+        return first_char + second_char
+
+
+def operate(a, b, op_string):
+    for operand in a, b:
+        assert isinstance(operand, Element), "Only Elements can be operated" \
+                                       "on by other elements."
+        if isinstance(operand.value, err.FormulaError):
+            return operand.value
+    return Combined(OPERATORS[op_string](a.value, b.value), a.operator_string)
+
 OPERATORS = {
     '^': pow,
     '*': mul,
     '/': truediv,
     '+': add,
     '-': sub,
+    '<': lt,
+    '<=': le,  # reversed '=<' is not valid
+    '=': eq,
+    '<>': ne,  # not equal
+    '>=': ge,  # reversed '=>' is not valid
+    '>': gt
 }
 OPERATOR_LEVELS = (
     ('^',),  # tuple of one
     ('*', '/'),
-    ('+', '-')
+    ('+', '-'),
+    ('=', '<', '>', '>=', '<=')
 )
 QUOTES = "'", '"'
 ARABIC_NUMERALS = '0123456789'
